@@ -54,8 +54,10 @@ export default {
           },
         });
 
-      case "/":
-        return Response.redirect(`https://github.com/${env.REPO}`, 302);
+      // NOTE: no "/" handler. The Worker is bound to hellodb.dev via
+      // route patterns that only claim /install*, /health, /docs,
+      // /readme, /releases. Everything else (including "/") falls
+      // through to the Cloudflare Pages deployment of `landing/`.
 
       case "/docs":
       case "/readme":

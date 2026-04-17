@@ -7,11 +7,18 @@
   "vars": {
     "INSTALLER_VERSION": "0.2.0",
     "REPO": "eprasad7/hellodb",
-    "INSTALL_SCRIPT_SH_RAW": "https://raw.githubusercontent.com/eprasad7/hellodb/master/scripts/install.sh",
-    "INSTALL_SCRIPT_PS1_RAW": "https://raw.githubusercontent.com/eprasad7/hellodb/master/scripts/install.ps1"
+    "INSTALL_SCRIPT_SH_RAW": "https://raw.githubusercontent.com/eprasad7/hellodb/main/scripts/install.sh",
+    "INSTALL_SCRIPT_PS1_RAW": "https://raw.githubusercontent.com/eprasad7/hellodb/main/scripts/install.ps1"
   },
+  // Route patterns (NOT custom_domain) so the Cloudflare Pages deployment
+  // of landing/ can own the apex. The Worker only intercepts the paths it
+  // needs — installer scripts + diagnostic/redirect routes. Everything
+  // else falls through to Pages.
   "routes": [
-    { "pattern": "hellodb.dev", "custom_domain": true },
-    { "pattern": "www.hellodb.dev", "custom_domain": true }
+    { "pattern": "hellodb.dev/install*",   "zone_name": "hellodb.dev" },
+    { "pattern": "hellodb.dev/health",     "zone_name": "hellodb.dev" },
+    { "pattern": "hellodb.dev/docs",       "zone_name": "hellodb.dev" },
+    { "pattern": "hellodb.dev/readme",     "zone_name": "hellodb.dev" },
+    { "pattern": "hellodb.dev/releases",   "zone_name": "hellodb.dev" }
   ]
 }
