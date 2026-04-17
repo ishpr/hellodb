@@ -9,7 +9,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
-  RUSTFLAGS: "-D warnings"
+  # NOTE: we deliberately do NOT set RUSTFLAGS: -D warnings at workflow scope.
+  # Doing so propagates into release builds and turns harmless deprecation /
+  # dead-code warnings from transitive deps into fatal build errors. We
+  # enforce -D warnings only where we own the code: the clippy step below.
 
 jobs:
   # -----------------------------------------------------------------------
