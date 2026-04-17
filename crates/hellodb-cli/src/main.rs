@@ -4,6 +4,7 @@
 //!
 //!   hellodb init              — first-time setup (identity, brain.toml)
 //!   hellodb status            — identity + namespaces + brain state
+//!   hellodb recall [opts]     — rank curated facts by decayed score, emit markdown/json
 //!   hellodb mcp               — run the MCP server (stdio, for Claude Code)
 //!   hellodb brain [args...]   — run the passive-memory digest pass
 //!   hellodb doctor            — diagnose config/permission/DB-open issues
@@ -17,15 +18,18 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use hellodb_core::Record;
 use hellodb_crypto::{content_hash, KeyPair, SigningKey};
-use hellodb_storage::{SqliteEngine, StorageEngine};
+use hellodb_storage::{decayed_score, SqliteEngine, StorageEngine};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let code = match args.first().map(String::as_str) {
         Some("init") => cmd_init(&args[1..]),
         Some("status") => cmd_status(&args[1..]),
+        Some("recall") => cmd_recall(&args[1..]),
         Some("mcp") => cmd_exec_sibling("hellodb-mcp", &args[1..]),
         Some("brain") => cmd_exec_sibling("hellodb-brain", &args[1..]),
         Some("doctor") => cmd_doctor(),
@@ -57,6 +61,9 @@ fn print_help() {
     println!("subcommands:");
     println!("  init       first-time setup: data dir, identity key, brain.toml");
     println!("  status     show identity, namespaces, record counts, brain state");
+    println!("  recall     top facts ranked by decayed score (markdown or json)");
+    println!("             flags: --top N (default 8), --namespace NS (default claude.facts),");
+    println!("                    --format md|json (default md), --half-life-days D (default 7)");
     println!("  mcp        run the MCP server (stdio transport; for Claude Code)");
     println!("  brain      run one passive-memory digest pass (see --help for flags)");
     println!("  doctor     diagnose common setup issues");
@@ -232,6 +239,195 @@ fn cmd_status(_args: &[String]) -> Result<i32, String> {
     // Silence "unused" by referencing Record at least once — documents intent
     // that future status extensions will surface record-level info.
     let _ = std::marker::PhantomData::<Record>;
+    Ok(0)
+}
+
+// --- recall ---------------------------------------------------------------
+
+/// Rank records in a facts-style namespace by their decay-adjusted score,
+/// emit the top-N as markdown (for hook injection / human reading) or JSON
+/// (for programmatic consumption by another tool).
+///
+/// Non-fatal on every error the session start hook might hit: if the DB is
+/// absent, empty, or unreadable, we print nothing and exit 0. Silence is the
+/// intentional response — a broken recall should not break the user's
+/// Claude Code session start.
+fn cmd_recall(args: &[String]) -> Result<i32, String> {
+    let mut top: usize = 8;
+    let mut namespace = "claude.facts".to_string();
+    let mut format = "md".to_string();
+    let mut half_life_days: f64 = 7.0;
+    let mut quiet = false;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--top" => {
+                top = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(8);
+                i += 2;
+            }
+            "--namespace" => {
+                namespace = args.get(i + 1).cloned().unwrap_or(namespace);
+                i += 2;
+            }
+            "--format" => {
+                format = args.get(i + 1).cloned().unwrap_or(format);
+                i += 2;
+            }
+            "--half-life-days" => {
+                half_life_days = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(7.0);
+                i += 2;
+            }
+            "--quiet" => {
+                quiet = true;
+                i += 1;
+            }
+            other => {
+                eprintln!("recall: unknown flag {other}");
+                return Ok(2);
+            }
+        }
+    }
+
+    let data = data_dir();
+    let identity_path = data.join("identity.key");
+    if !identity_path.exists() {
+        if !quiet {
+            eprintln!("recall: not initialized (no identity.key). run `hellodb init` first.");
+        }
+        return Ok(0);
+    }
+
+    let keypair = match load_identity(&identity_path) {
+        Ok(kp) => kp,
+        Err(e) => {
+            if !quiet {
+                eprintln!("recall: {e}");
+            }
+            return Ok(0);
+        }
+    };
+
+    let db_path = data.join("local.db");
+    let db_key = derive_sqlcipher_key(&keypair.signing);
+    let storage = match SqliteEngine::open(db_path.to_str().unwrap_or(""), &db_key) {
+        Ok(s) => s,
+        Err(e) => {
+            if !quiet {
+                eprintln!("recall: couldn't open db: {e}");
+            }
+            return Ok(0);
+        }
+    };
+
+    // Skip silently if the namespace doesn't exist yet — common on fresh installs.
+    if storage.get_namespace(&namespace).map_err(|e| e.to_string())?.is_none() {
+        return Ok(0);
+    }
+
+    let branch = format!("{namespace}/main");
+    let records = storage
+        .list_records_by_namespace(&namespace, &branch, 10_000, 0)
+        .map_err(|e| e.to_string())?;
+
+    // Pair each record with its decay-adjusted score. Unreinforced records
+    // (no metadata row) default to 0.0 so actively-used facts rise above
+    // the unread baseline.
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let half_life_ms = (half_life_days * 86_400_000.0) as u64;
+
+    let mut scored: Vec<(f32, Record)> = records
+        .into_iter()
+        .filter(|r| {
+            // Skip archived records so recall doesn't resurface aged-out memory.
+            storage
+                .get_record_metadata(&r.record_id)
+                .ok()
+                .flatten()
+                .and_then(|m| m.archived_at_ms)
+                .is_none()
+        })
+        .map(|r| {
+            let score = storage
+                .get_record_metadata(&r.record_id)
+                .ok()
+                .flatten()
+                .map(|m| decayed_score(&m, now, half_life_ms))
+                .unwrap_or(0.0);
+            (score, r)
+        })
+        .collect();
+
+    // Descending by decayed score; ties broken by newer created_at_ms first.
+    scored.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.1.created_at_ms.cmp(&a.1.created_at_ms))
+    });
+    scored.truncate(top);
+
+    if scored.is_empty() {
+        // Nothing to recall — print empty string in md mode (hook just injects nothing)
+        // or empty array in json mode. Either way, exit 0 silently.
+        if format == "json" {
+            println!("[]");
+        }
+        return Ok(0);
+    }
+
+    match format.as_str() {
+        "json" => {
+            let items: Vec<_> = scored
+                .iter()
+                .map(|(s, r)| {
+                    serde_json::json!({
+                        "record_id": r.record_id,
+                        "topic": r.data.get("topic").and_then(|v| v.as_str()).unwrap_or(""),
+                        "statement": r.data.get("statement").and_then(|v| v.as_str()).unwrap_or(""),
+                        "confidence": r.data.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                        "decayed_score": s,
+                    })
+                })
+                .collect();
+            println!("{}", serde_json::to_string(&items).unwrap_or_else(|_| "[]".into()));
+        }
+        _ => {
+            // Markdown bullet list. Group by topic so context is readable at a glance.
+            use std::collections::BTreeMap;
+            let mut by_topic: BTreeMap<String, Vec<(&f32, &Record)>> = BTreeMap::new();
+            for (s, r) in &scored {
+                let topic = r
+                    .data
+                    .get("topic")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("other")
+                    .to_string();
+                by_topic.entry(topic).or_default().push((s, r));
+            }
+            for (topic, facts) in &by_topic {
+                println!("**{topic}**");
+                for (score, r) in facts {
+                    // Try the common text-bearing fields across schemas:
+                    // brain.fact uses `statement`; episodes use `text`;
+                    // legacy feedback uses `rule`; notes use `content`.
+                    let statement = r
+                        .data
+                        .get("statement")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| r.data.get("text").and_then(|v| v.as_str()))
+                        .or_else(|| r.data.get("rule").and_then(|v| v.as_str()))
+                        .or_else(|| r.data.get("content").and_then(|v| v.as_str()))
+                        .unwrap_or("(no text)");
+                    println!("- {statement}  _(score {:.2})_", score);
+                }
+                println!();
+            }
+        }
+    }
+
     Ok(0)
 }
 
