@@ -141,14 +141,22 @@ info "writing $ENV_FILE..."
   echo "# Regenerate by re-running scripts/onboard.sh."
   echo ""
   if [[ "$CF_ENABLED" == "1" ]]; then
-    WORKER_URL_LINE=$(grep -E '^https://hellodb-gateway\..*workers\.dev' <<<"$(gh api user 2>/dev/null || true; cat "$HOME/.hellodb/brain.toml" 2>/dev/null || true)" 2>/dev/null || true)
-    # Best effort: re-read from the last wrangler deploy output if we can.
-    # Otherwise just document the vars for manual fill.
+    # `setup-cloudflare.sh` prints a "Add these to your shell" block with the
+    # concrete worker URL, and also writes a marker file we can read here.
+    WORKER_URL=""
+    if [[ -f "$HOME/.hellodb/cloudflare.gateway.url" ]]; then
+      WORKER_URL=$(cat "$HOME/.hellodb/cloudflare.gateway.url" 2>/dev/null || true)
+    fi
+    # If the user exported it in their current shell session, that wins.
+    WORKER_URL="${HELLODB_EMBED_GATEWAY_URL:-$WORKER_URL}"
+
     echo "export HELLODB_EMBED_BACKEND=cloudflare"
-    if [[ -n "${HELLODB_EMBED_GATEWAY_URL:-}" ]]; then
-      echo "export HELLODB_EMBED_GATEWAY_URL=${HELLODB_EMBED_GATEWAY_URL}"
+    if [[ -n "$WORKER_URL" ]]; then
+      echo "export HELLODB_EMBED_GATEWAY_URL=$WORKER_URL"
     else
-      echo "# export HELLODB_EMBED_GATEWAY_URL=<your worker URL>  # from wrangler output above"
+      echo "# export HELLODB_EMBED_GATEWAY_URL=<your worker URL>"
+      echo "# (scroll up to the 'make setup-cloudflare' output — the worker URL"
+      echo "#  was printed there; drop it in above and re-source this file)"
     fi
     if [[ "$(uname -s)" == "Darwin" ]]; then
       echo 'export HELLODB_EMBED_GATEWAY_TOKEN=$(security find-generic-password -a "$USER" -s hellodb-gateway-token -w 2>/dev/null)'

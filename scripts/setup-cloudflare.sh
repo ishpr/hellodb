@@ -141,6 +141,10 @@ if [[ -z "$WORKER_URL" ]]; then
   printf '%s\n' "$DEPLOY_OUT" | tail -20
 else
   ok "deployed: $WORKER_URL"
+  # Stash the URL so `onboard.sh` (or anything else) can pick it up without
+  # having to re-parse `wrangler deploy` output. Gitignored via $HOME scope.
+  mkdir -p "$HOME/.hellodb"
+  printf '%s\n' "$WORKER_URL" > "$HOME/.hellodb/cloudflare.gateway.url"
 fi
 
 # ----- 6. print config lines ---------------------------------------------

@@ -45,6 +45,15 @@ struct Entry {
 }
 
 /// Per-namespace vector index. Persisted to `{dir}/{namespace}.vec`.
+///
+/// **Concurrency:** each `open()` acquires a POSIX advisory `flock` on a
+/// sidecar `.vec.lock` file and holds it for the VectorIndex's lifetime.
+/// This serializes open+mutate+flush across processes so two MCP tool
+/// calls doing `hellodb_upsert_embedding` on the same namespace can't
+/// silently lose each other's writes (read-same-state → each mutates →
+/// each flushes → last-write-wins). On non-Unix platforms the lock is
+/// a no-op — users on those platforms shouldn't run concurrent writers
+/// to the same namespace yet.
 pub struct VectorIndex {
     path: PathBuf,
     key_bytes: [u8; 32],
@@ -53,6 +62,10 @@ pub struct VectorIndex {
     /// record_id -> position in `entries`, for O(1) upsert/remove.
     index: HashMap<String, usize>,
     entries: Vec<Entry>,
+    /// Held for the lifetime of the VectorIndex; dropped when the struct
+    /// is dropped or (on crash) when the process exits.
+    #[allow(dead_code)]
+    _lock: FileLock,
 }
 
 impl std::fmt::Debug for VectorIndex {
@@ -78,8 +91,17 @@ impl VectorIndex {
     /// If the file exists but cannot be decrypted with `key`, returns
     /// [`VectorError::Crypto`].
     pub fn open(dir: &Path, namespace: &str, key: &NamespaceKey) -> Result<Self, VectorError> {
+        fs::create_dir_all(dir)?;
         let path = dir.join(format!("{}.vec", namespace));
+        let lock_path = dir.join(format!("{}.vec.lock", namespace));
         let key_bytes = key.to_bytes();
+
+        // Acquire the exclusive file lock BEFORE reading state. Any concurrent
+        // writer is serialized behind us (or us behind them). The lock is
+        // advisory, not mandatory — nothing stops a caller who bypasses
+        // VectorIndex from writing the .vec directly, but we own all write
+        // paths in the workspace.
+        let lock = FileLock::acquire_exclusive(&lock_path)?;
 
         if !path.exists() {
             return Ok(Self {
@@ -89,6 +111,7 @@ impl VectorIndex {
                 dim: None,
                 index: HashMap::new(),
                 entries: Vec::new(),
+                _lock: lock,
             });
         }
 
@@ -109,6 +132,7 @@ impl VectorIndex {
             dim: file.dim,
             index,
             entries: file.entries,
+            _lock: lock,
         })
     }
 
@@ -285,6 +309,55 @@ impl VectorIndex {
         fs::rename(&tmp, &self.path)?;
         Ok(())
     }
+}
+
+// --- File locking --------------------------------------------------------
+//
+// POSIX `flock(fd, LOCK_EX)` held for the lifetime of the VectorIndex.
+// When the FileLock is dropped (or the process exits), the kernel releases
+// the lock automatically. Non-Unix: no-op.
+
+pub(crate) struct FileLock {
+    #[cfg(unix)]
+    _fd: std::fs::File,
+}
+
+impl FileLock {
+    pub(crate) fn acquire_exclusive(path: &Path) -> Result<Self, VectorError> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            let f = fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(false)
+                .open(path)?;
+            // LOCK_EX = 2 on every Unix we care about (Linux, macOS, *BSD).
+            // Blocks until the lock is available. flock(2) returns 0 on
+            // success, -1 on error.
+            let ret = unsafe { libc_flock(f.as_raw_fd(), 2) };
+            if ret != 0 {
+                let err = std::io::Error::last_os_error();
+                return Err(VectorError::Io(err));
+            }
+            Ok(FileLock { _fd: f })
+        }
+        #[cfg(not(unix))]
+        {
+            // No advisory-lock facility without LockFileEx+more FFI; leave
+            // as a documented no-op. Users running multiple concurrent
+            // writers on non-Unix should serialize externally until we add
+            // platform-specific locking.
+            let _ = path;
+            Ok(FileLock {})
+        }
+    }
+}
+
+#[cfg(unix)]
+extern "C" {
+    #[link_name = "flock"]
+    fn libc_flock(fd: i32, operation: i32) -> i32;
 }
 
 #[cfg(test)]

@@ -127,8 +127,7 @@ impl GatewaySyncBackend {
     }
 
     fn blob_url(&self, key: &str) -> String {
-        // Keys are `[a-zA-Z0-9._/-]` per hellodb content-addressing; no encoding
-        // needed. Slashes are preserved as path separators.
+        // Caller is expected to have passed validate_key() first.
         format!("{}/r2/{}", self.base_url, key)
     }
 
@@ -137,8 +136,43 @@ impl GatewaySyncBackend {
     }
 }
 
+/// Validate a blob key before embedding it in a URL path. This must stay in
+/// sync with the gateway Worker's `extractKey` validator (gateway/src/r2.ts):
+/// charset `[A-Za-z0-9/._-]`, max 512 bytes, no leading `/`, no `.` / `..`
+/// path segments, no control chars, no empty segments. Defense in depth —
+/// hellodb-sync today only generates content-addressed keys that fit this
+/// pattern, but the trait is public and future callers might not.
+fn validate_key(key: &str) -> Result<(), SyncError> {
+    if key.is_empty() || key.len() > 512 {
+        return Err(SyncError::Transport(format!(
+            "invalid key (empty or > 512 bytes): {} bytes",
+            key.len()
+        )));
+    }
+    if key.starts_with('/') {
+        return Err(SyncError::Transport("invalid key (leading slash)".into()));
+    }
+    for seg in key.split('/') {
+        if seg.is_empty() || seg == "." || seg == ".." {
+            return Err(SyncError::Transport(format!(
+                "invalid key segment: {seg:?} in {key:?}"
+            )));
+        }
+    }
+    for ch in key.chars() {
+        let ok = ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '_' | '-');
+        if !ok {
+            return Err(SyncError::Transport(format!(
+                "invalid key (disallowed char {ch:?}): {key:?}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 impl SyncBackend for GatewaySyncBackend {
     fn put_blob(&mut self, key: &str, data: &[u8]) -> Result<(), SyncError> {
+        validate_key(key)?;
         let url = self.blob_url(key);
         let resp = self
             .agent
@@ -160,6 +194,7 @@ impl SyncBackend for GatewaySyncBackend {
     }
 
     fn get_blob(&self, key: &str) -> Result<Option<Vec<u8>>, SyncError> {
+        validate_key(key)?;
         let url = self.blob_url(key);
         let resp = self
             .agent
@@ -225,6 +260,7 @@ impl SyncBackend for GatewaySyncBackend {
     }
 
     fn delete_blob(&mut self, key: &str) -> Result<(), SyncError> {
+        validate_key(key)?;
         let url = self.blob_url(key);
         let resp = self
             .agent
