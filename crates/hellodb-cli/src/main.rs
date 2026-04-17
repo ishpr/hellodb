@@ -354,13 +354,16 @@ fn cmd_recall(args: &[String]) -> Result<i32, String> {
 
     let db_path = data.join("local.db");
     let db_key = derive_sqlcipher_key(&keypair.signing);
+    // Path error is ALWAYS a misconfig (HELLODB_HOME set to a non-UTF-8
+    // path) — never a "no results" condition. Surface it even under
+    // `--quiet` so users don't silently get empty output while thinking
+    // recall just found nothing. `--quiet` is meant to suppress
+    // informational noise, not mask setup bugs.
     let db_path_str = match path_as_str(&db_path) {
         Ok(s) => s,
         Err(e) => {
-            if !quiet {
-                eprintln!("recall: {e}");
-            }
-            return Ok(0);
+            eprintln!("recall: {e}");
+            return Ok(2);
         }
     };
     let storage = match SqliteEngine::open(db_path_str, &db_key) {

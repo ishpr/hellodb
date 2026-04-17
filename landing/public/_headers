@@ -35,22 +35,40 @@
   Content-Type: image/png
   Cache-Control: public, max-age=86400
 
-# Long-cache hashed assets.
-/_next/static/*
-  Cache-Control: public, max-age=31536000, immutable
+# /_next/static/* long-cache rule removed — CF Pages applies its own
+# sensible default (4h + immutable for hashed assets). A previous
+# aspirational `max-age=31536000, immutable` rule here was merged by
+# the edge with the site-wide `must-revalidate` and CF's default,
+# producing a contradictory "immutable + must-revalidate" header mash.
+# CF's default is correct; we let it pass.
 
 # Site-wide security headers.
-# CSP is intentionally strict — the landing is static SSG, no inline
-# scripts except the JSON-LD block (which is safe by nature but needs
-# 'unsafe-inline' to render). If we ever add third-party analytics,
-# update this allowlist explicitly rather than loosening it.
+#
+# CSP model:
+#   - script-src 'self' blocks eval(), Function(), setTimeout("string")
+#     — this is the strict gate that protects against inline-script XSS.
+#   - script-src-elem 'self' 'unsafe-inline' allows <script> element
+#     content specifically. The only inline <script> this site emits is
+#     the JSON-LD metadata block in app/layout.tsx (type="application/
+#     ld+json", not executable JS but still subject to CSP). Everything
+#     else is external src= chunks under /_next/static/.
+#   - style-src 'unsafe-inline' is needed for Next.js 16's inlined
+#     critical CSS on initial paint; there's no escape hatch without
+#     moving to SSR with nonces.
+#
+# If third-party analytics / fonts are ever added, widen the allowlist
+# explicitly — do NOT revert script-src to 'unsafe-inline' wholesale.
+#
+# HSTS: max-age=63072000 (2y) + includeSubDomains only. Intentionally
+# no `preload` token — that requires submission at hstspreload.org and
+# advertising preload without submitting is misleading to scanners.
 /*
   Cache-Control: public, max-age=0, must-revalidate
-  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  Strict-Transport-Security: max-age=63072000; includeSubDomains
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self'; script-src-elem 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests
   Cross-Origin-Opener-Policy: same-origin
   X-Robots-Tag: index, follow
