@@ -127,6 +127,21 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
+      - name: Pin Perl for openssl-src on Windows only
+        if: runner.os == 'Windows'
+        shell: bash
+        # On Windows, running cargo from MSYS2 bash causes openssl-sys to pick
+        # up the wrong perl (MSYS2's, missing required modules like
+        # Locale::Maketext::Simple). Pin it to Strawberry Perl which ships
+        # with the windows-2022 runner.
+        #
+        # MUST be done in its own step (not an inline `env:` on the cargo
+        # step with a `${{ }}` expression) because GitHub Actions can't
+        # conditionally REMOVE an env var — `OPENSSL_SRC_PERL=''` still sets
+        # it to empty string, which openssl-src dutifully tries to exec.
+        # That broke Linux + macOS builds last time.
+        run: echo "OPENSSL_SRC_PERL=C:/Strawberry/perl/bin/perl.exe" >> "$GITHUB_ENV"
+
       - name: cargo build --release
         shell: bash
         # Scope to the three shipping crates via -p. Using plain `--bin X`
@@ -134,13 +149,6 @@ jobs:
         # not a crate named `hellodb`. This also skips building test binaries
         # and crates that aren't on the ship path (auth, core, crypto, query
         # are built transitively as deps, not standalone).
-        #
-        # OPENSSL_SRC_PERL: on Windows, running cargo from MSYS2 bash causes
-        # openssl-sys to pick up the wrong perl (MSYS2's, missing required
-        # modules like Locale::Maketext::Simple). Pin it to Strawberry Perl
-        # which ships with the windows-2022 runner. No-op on other OSes.
-        env:
-          OPENSSL_SRC_PERL: ${{ runner.os == 'Windows' && 'C:/Strawberry/perl/bin/perl.exe' || '' }}
         run: cargo build --release --target ${{ matrix.target }} -p hellodb-cli -p hellodb-mcp -p hellodb-brain
 
       - name: Bundle plugin artifact (POSIX)
