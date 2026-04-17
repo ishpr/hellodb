@@ -1,0 +1,156 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+    tags: ['v*']
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  # -----------------------------------------------------------------------
+  # Fast check lane: always runs. Blocks the build matrix on PRs.
+  # -----------------------------------------------------------------------
+  check:
+    name: check + test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system deps (sqlcipher via bundled-sqlcipher needs these)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test (workspace)
+        run: cargo test --workspace --all-targets
+
+      - name: Validate plugin + marketplace manifests
+        run: |
+          # Lightweight JSON schema sanity (no claude CLI in CI)
+          python3 -c "import json; json.load(open('plugin/.claude-plugin/plugin.json'))"
+          python3 -c "import json; json.load(open('plugin/.mcp.json'))"
+          python3 -c "import json; json.load(open('plugin/hooks/hooks.json'))"
+          python3 -c "import json; json.load(open('.claude-plugin/marketplace.json'))"
+
+  # -----------------------------------------------------------------------
+  # Gateway (TypeScript + Wrangler) lane: tsc strict + vitest.
+  # -----------------------------------------------------------------------
+  gateway:
+    name: gateway (ts + vitest)
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: gateway/package-lock.json
+      - run: npm ci
+      - name: Generate Wrangler runtime types
+        run: npx wrangler types
+      - name: tsc strict
+        run: npx tsc --noEmit
+      - run: npm test -- --run
+      - name: wrangler deploy --dry-run
+        run: npx wrangler deploy --dry-run
+
+  # -----------------------------------------------------------------------
+  # Per-platform release builds. Run on push to main and on tagged releases.
+  # -----------------------------------------------------------------------
+  build:
+    name: build ${{ matrix.target }}
+    needs: [check, gateway]
+    if: github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14            # Apple Silicon
+            target: aarch64-apple-darwin
+          - os: macos-13            # Intel Mac
+            target: x86_64-apple-darwin
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm    # ARM64 Linux runner
+            target: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: cargo build --release
+        run: cargo build --release --target ${{ matrix.target }} --bin hellodb --bin hellodb-mcp --bin hellodb-brain
+
+      - name: Bundle plugin artifact
+        run: ./scripts/bundle-plugin.sh ${{ matrix.target }}
+
+      - name: Package tarball
+        run: |
+          mkdir -p dist
+          tar -czf "dist/hellodb-plugin-${{ matrix.target }}.tar.gz" \
+              --exclude='plugin/bin/.gitkeep' plugin \
+              .claude-plugin/marketplace.json
+          (cd dist && shasum -a 256 "hellodb-plugin-${{ matrix.target }}.tar.gz" > "hellodb-plugin-${{ matrix.target }}.tar.gz.sha256")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hellodb-plugin-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  # -----------------------------------------------------------------------
+  # Tagged release: attach all platform tarballs to a GitHub Release.
+  # -----------------------------------------------------------------------
+  release:
+    name: release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: hellodb-plugin-*
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') }}

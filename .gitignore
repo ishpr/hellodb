@@ -3,3 +3,16 @@
 *.swp
 *.swo
 .DS_Store
+
+# Claude Code per-machine state
+.claude/worktrees/
+.claude/settings.local.json
+
+# Node / Wrangler
+**/node_modules/
+**/.wrangler/
+
+# Platform-specific binaries (bundled on demand by make bundle / CI)
+/plugin/bin/hellodb
+/plugin/bin/hellodb-mcp
+/plugin/bin/hellodb-brain
