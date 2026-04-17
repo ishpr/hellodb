@@ -14,6 +14,22 @@
 **/node_modules/
 **/.wrangler/
 
+# Secrets — belt-and-suspenders. Real secrets live in ~/.hellodb/env.sh
+# (outside the repo) and Cloudflare Worker secrets (never on disk).
+# These patterns exist so an accidental local file drop doesn't make it
+# into a commit. Matches `.env`, `.env.local`, `.dev.vars` (wrangler),
+# `*.secret`, `*.secrets`, `credentials*.json`, any `.pem` / `.key` file
+# outside target/ (identity.key lives in ~/.hellodb, never the repo).
+.env
+.env.*
+.dev.vars
+*.secret
+*.secrets
+credentials*.json
+*.pem
+*.key
+!identity.key.sample
+
 # Platform-specific binaries (bundled on demand by make bundle / CI)
 /plugin/bin/hellodb
 /plugin/bin/hellodb-mcp
