@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "hellodb-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-06",
+  "ai": {
+    "binding": "AI"
+  },
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "hellodb"
+    }
+  ],
+  "vars": {
+    "GATEWAY_VERSION": "0.1.0"
+  },
+  "observability": {
+    "enabled": true
+  }
+  // GATEWAY_TOKEN is set via `wrangler secret put GATEWAY_TOKEN` — never commit it.
+}
