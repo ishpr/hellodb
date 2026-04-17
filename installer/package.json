@@ -1,0 +1,15 @@
+{
+  "name": "hellodb-installer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Worker serving https://hellodb.dev — hosts install.sh and redirects the root to the GitHub repo.",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  }
+}
