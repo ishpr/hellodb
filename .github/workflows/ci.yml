@@ -129,7 +129,12 @@ jobs:
 
       - name: cargo build --release
         shell: bash
-        run: cargo build --release --target ${{ matrix.target }} --bin hellodb --bin hellodb-mcp --bin hellodb-brain
+        # Scope to the three shipping crates via -p. Using plain `--bin X`
+        # is ambiguous since `hellodb-cli` publishes the `hellodb` binary,
+        # not a crate named `hellodb`. This also skips building test binaries
+        # and crates that aren't on the ship path (auth, core, crypto, query
+        # are built transitively as deps, not standalone).
+        run: cargo build --release --target ${{ matrix.target }} -p hellodb-cli -p hellodb-mcp -p hellodb-brain
 
       - name: Bundle plugin artifact (POSIX)
         if: runner.os != 'Windows'
