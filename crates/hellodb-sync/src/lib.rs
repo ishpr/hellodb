@@ -25,6 +25,7 @@ pub mod delta;
 pub mod engine;
 pub mod error;
 pub mod fs_backend;
+pub mod gateway_backend;
 pub mod manifest;
 pub mod memory_backend;
 
@@ -35,5 +36,6 @@ pub use delta::{DeltaBundle, DeltaMetadata, SealedDelta};
 pub use engine::{PullResult, PushResult, SyncEngine};
 pub use error::SyncError;
 pub use fs_backend::FileSystemSyncBackend;
+pub use gateway_backend::{GatewaySyncBackend, Health};
 pub use manifest::{SyncManifest, SyncStatus};
 pub use memory_backend::MemorySyncBackend;

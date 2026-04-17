@@ -20,14 +20,23 @@ pub enum SyncError {
     Conflict(String),
 
     #[error("manifest not found for device '{device}' namespace '{namespace}'")]
-    ManifestNotFound {
-        device: String,
-        namespace: String,
-    },
+    ManifestNotFound { device: String, namespace: String },
 
     #[error("storage error: {0}")]
     Storage(#[from] hellodb_storage::StorageError),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("HTTP error {status}: {body}")]
+    Http { status: u16, body: String },
+
+    #[error("transport error: {0}")]
+    Transport(String),
+
+    #[error("authentication failed")]
+    Auth,
+
+    #[error("not found: {0}")]
+    NotFound(String),
 }
