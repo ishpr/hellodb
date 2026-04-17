@@ -7,6 +7,11 @@ members = [
     "crates/hellodb-auth",
     "crates/hellodb-query",
     "crates/hellodb-sync",
+    "crates/hellodb-mcp",
+    "crates/hellodb-vector",
+    "crates/hellodb-brain",
+    "crates/hellodb-cli",
+    "crates/hellodb-embed",
 ]
 
 # Root package enables workspace-level integration tests in tests/
@@ -66,6 +71,8 @@ hellodb-storage = { path = "crates/hellodb-storage" }
 hellodb-auth = { path = "crates/hellodb-auth" }
 hellodb-query = { path = "crates/hellodb-query" }
 hellodb-sync = { path = "crates/hellodb-sync" }
+hellodb-vector = { path = "crates/hellodb-vector" }
+hellodb-embed = { path = "crates/hellodb-embed" }
 
 [profile.release]
 lto = true

@@ -1,0 +1,22 @@
+[package]
+name = "hellodb-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hellodb-mcp"
+path = "src/main.rs"
+
+[dependencies]
+hellodb-core = { workspace = true }
+hellodb-crypto = { workspace = true }
+hellodb-storage = { workspace = true }
+hellodb-auth = { workspace = true }
+hellodb-query = { workspace = true }
+hellodb-vector = { workspace = true }
+hellodb-embed = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

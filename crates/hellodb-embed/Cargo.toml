@@ -1,0 +1,23 @@
+[package]
+name = "hellodb-embed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# Enable pure-Rust local embedding via fastembed-rs. Adds ~40MB to the binary
+# (ONNX runtime). Off by default so the standard build stays lean.
+fastembed = ["dep:fastembed"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+
+fastembed = { version = "4", optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
