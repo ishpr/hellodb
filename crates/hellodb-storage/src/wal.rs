@@ -1,7 +1,7 @@
 //! Write-ahead log for crash recovery.
 //!
-//! All mutations go through the WAL before being applied to the storage
-//! engine. On startup, any uncommitted WAL entries are replayed.
+//! This is a standalone Phase 0 WAL utility module. The current SqliteEngine
+//! does not yet route mutations through this WAL automatically.
 //!
 //! Phase 0 implementation: simplified append-only JSON lines file.
 

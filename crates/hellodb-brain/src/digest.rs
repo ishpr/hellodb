@@ -1,18 +1,12 @@
 //! Fact extraction from episodes — the "digestion" step.
 //!
-//! MVP ships a `mock` backend: deterministic, LLM-free, good enough to
-//! prove the pipeline mechanics end-to-end. Plug a real LLM backend in
-//! by implementing [`DigestBackend`] and wiring it in the main.rs match
-//! against `config.digest.backend`.
-//!
-//! Intentional design: digestion is a pluggable trait, not a baked-in
-//! HTTP client. The brain orchestrates; the LLM call (or its absence)
-//! is strictly a plug-in. This keeps the brain crate free of network
-//! dependencies and makes the whole pipeline testable without a running
-//! model server.
+//! `mock` backend: deterministic, LLM-free, good enough for offline tests.
+//! `openrouter` backend: production path that calls OpenRouter chat completions
+//! and parses a strict JSON schema for consolidated facts.
 
 use hellodb_storage::TailEntry;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
 use crate::config::Config;
 use crate::error::BrainError;
@@ -52,13 +46,16 @@ pub trait DigestBackend {
     fn digest(&self, episodes: &[TailEntry], config: &Config) -> Result<Vec<Fact>, BrainError>;
 }
 
-/// Pick a backend based on config. MVP: only "mock" is wired.
-/// Plug in "openai" / "anthropic" / "local-http" here when ready.
+const OPENROUTER_DEFAULT_BASE: &str = "https://openrouter.ai/api/v1";
+const OPENROUTER_DEFAULT_MODEL: &str = "openai/gpt-4o-mini";
+
+/// Pick a backend based on config.
 pub fn select_backend(name: &str) -> Result<Box<dyn DigestBackend>, BrainError> {
     match name {
         "mock" => Ok(Box::new(MockBackend)),
+        "openrouter" => Ok(Box::new(OpenRouterBackend::from_env()?)),
         other => Err(BrainError::Config(format!(
-            "unknown digest backend '{other}'. MVP supports: mock"
+            "unknown digest backend '{other}'. supported: mock, openrouter"
         ))),
     }
 }
@@ -136,6 +133,179 @@ impl DigestBackend for MockBackend {
     }
 }
 
+struct OpenRouterBackend {
+    api_key: String,
+    model: String,
+    base_url: String,
+    fallback_to_mock: bool,
+}
+
+impl OpenRouterBackend {
+    fn from_env() -> Result<Self, BrainError> {
+        let api_key = std::env::var("HELLODB_BRAIN_OPENROUTER_API_KEY")
+            .map_err(|_| {
+                BrainError::Config(
+                    "openrouter backend selected but HELLODB_BRAIN_OPENROUTER_API_KEY is missing"
+                        .into(),
+                )
+            })?
+            .trim()
+            .to_string();
+        if api_key.is_empty() {
+            return Err(BrainError::Config(
+                "HELLODB_BRAIN_OPENROUTER_API_KEY is empty".into(),
+            ));
+        }
+
+        let model = std::env::var("HELLODB_BRAIN_OPENROUTER_MODEL")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| OPENROUTER_DEFAULT_MODEL.into());
+        let base_url = std::env::var("HELLODB_BRAIN_OPENROUTER_BASE_URL")
+            .ok()
+            .map(|s| s.trim().trim_end_matches('/').to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| OPENROUTER_DEFAULT_BASE.into());
+        let fallback_to_mock = std::env::var("HELLODB_BRAIN_OPENROUTER_FALLBACK_TO_MOCK")
+            .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+            .unwrap_or(false);
+
+        Ok(Self {
+            api_key,
+            model,
+            base_url,
+            fallback_to_mock,
+        })
+    }
+
+    fn call_openrouter(&self, episodes: &[TailEntry]) -> Result<Vec<Fact>, BrainError> {
+        let endpoint = format!("{}/chat/completions", self.base_url);
+        let prompt = build_digest_prompt(episodes);
+        let payload = json!({
+            "model": self.model,
+            "response_format": { "type": "json_object" },
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You convert user session episodes into durable memory facts. Return strict JSON with shape: {\"facts\":[{statement:string,topic:string,confidence:number,derived_from:string[],rationale?:string,supersedes?:string}]}. Confidence MUST be in [0,1]. Keep facts concise and avoid duplicates."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        });
+
+        let response = ureq::post(&endpoint)
+            .set("Authorization", &format!("Bearer {}", self.api_key))
+            .set("Content-Type", "application/json")
+            .send_json(payload)
+            .map_err(|e| BrainError::State(format!("openrouter request failed: {e}")))?;
+
+        let body: Value = response
+            .into_json()
+            .map_err(|e| BrainError::State(format!("openrouter response parse failed: {e}")))?;
+        let content = body
+            .get("choices")
+            .and_then(Value::as_array)
+            .and_then(|a| a.first())
+            .and_then(|v| v.get("message"))
+            .and_then(|v| v.get("content"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                BrainError::State("openrouter response missing message content".into())
+            })?;
+
+        parse_facts_payload(content)
+    }
+}
+
+impl DigestBackend for OpenRouterBackend {
+    fn digest(&self, episodes: &[TailEntry], config: &Config) -> Result<Vec<Fact>, BrainError> {
+        match self.call_openrouter(episodes) {
+            Ok(facts) => Ok(facts),
+            Err(e) => {
+                if self.fallback_to_mock {
+                    eprintln!("brain: openrouter digest failed, falling back to mock backend: {e}");
+                    MockBackend.digest(episodes, config)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+}
+
+fn build_digest_prompt(episodes: &[TailEntry]) -> String {
+    let rows: Vec<Value> = episodes
+        .iter()
+        .map(|e| {
+            json!({
+                "seq": e.seq,
+                "record_id": e.record.record_id,
+                "schema": e.record.schema,
+                "created_at_ms": e.record.created_at_ms,
+                "data": e.record.data,
+            })
+        })
+        .collect();
+
+    format!(
+        "Episodes (JSON):\n{}\n\nExtract durable facts only. Avoid transient chatter. Use derived_from record_ids from the input.",
+        serde_json::to_string_pretty(&rows).unwrap_or_else(|_| "[]".into())
+    )
+}
+
+fn parse_facts_payload(raw: &str) -> Result<Vec<Fact>, BrainError> {
+    let parsed: Value = serde_json::from_str(raw)
+        .map_err(|e| BrainError::State(format!("digest backend returned invalid JSON: {e}")))?;
+
+    let candidate = if parsed.is_array() {
+        parsed
+    } else if let Some(facts) = parsed.get("facts") {
+        facts.clone()
+    } else {
+        return Err(BrainError::State(
+            "digest backend JSON must be an array or object with `facts`".into(),
+        ));
+    };
+
+    let mut facts: Vec<Fact> = serde_json::from_value(candidate).map_err(|e| {
+        BrainError::State(format!("digest backend JSON had invalid fact shape: {e}"))
+    })?;
+    if facts.is_empty() {
+        return Err(BrainError::State(
+            "digest backend returned an empty fact list".into(),
+        ));
+    }
+
+    for fact in &mut facts {
+        if fact.statement.trim().is_empty() {
+            return Err(BrainError::State(
+                "digest backend returned a fact with empty statement".into(),
+            ));
+        }
+        if fact.topic.trim().is_empty() {
+            return Err(BrainError::State(
+                "digest backend returned a fact with empty topic".into(),
+            ));
+        }
+        if !fact.confidence.is_finite() {
+            return Err(BrainError::State(
+                "digest backend returned non-finite confidence".into(),
+            ));
+        }
+        fact.confidence = fact.confidence.clamp(0.0, 1.0);
+        if fact.derived_from.is_empty() {
+            return Err(BrainError::State(
+                "digest backend returned a fact with empty derived_from".into(),
+            ));
+        }
+    }
+    Ok(facts)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -190,5 +360,50 @@ mod tests {
         let episodes: Vec<_> = (0..10).map(|i| ep("x", "a", i)).collect();
         let facts = backend.digest(&episodes, &cfg).unwrap();
         assert!((facts[0].confidence - 0.95).abs() < 0.01);
+    }
+
+    #[test]
+    fn parse_facts_payload_rejects_invalid_json() {
+        let err = parse_facts_payload("{not json").unwrap_err();
+        assert!(err.to_string().contains("invalid JSON"));
+    }
+
+    #[test]
+    fn parse_facts_payload_rejects_empty_facts() {
+        let err = parse_facts_payload(r#"{"facts":[]}"#).unwrap_err();
+        assert!(err.to_string().contains("empty fact list"));
+    }
+
+    #[test]
+    fn parse_facts_payload_accepts_supersedes() {
+        let facts = parse_facts_payload(
+            r#"{
+              "facts": [
+                {
+                  "statement": "Use pnpm in this repo",
+                  "topic": "workflow",
+                  "confidence": 0.92,
+                  "derived_from": ["r1","r2"],
+                  "rationale": "seen in multiple sessions",
+                  "supersedes": "old-fact-id"
+                }
+              ]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(facts.len(), 1);
+        assert_eq!(facts[0].supersedes.as_deref(), Some("old-fact-id"));
+        assert!((facts[0].confidence - 0.92).abs() < 0.001);
+    }
+
+    #[test]
+    fn openrouter_backend_requires_api_key() {
+        let key = std::env::var("HELLODB_BRAIN_OPENROUTER_API_KEY").ok();
+        std::env::remove_var("HELLODB_BRAIN_OPENROUTER_API_KEY");
+        let res = OpenRouterBackend::from_env();
+        if let Some(v) = key {
+            std::env::set_var("HELLODB_BRAIN_OPENROUTER_API_KEY", v);
+        }
+        assert!(res.is_err());
     }
 }

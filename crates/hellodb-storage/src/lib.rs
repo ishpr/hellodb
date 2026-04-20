@@ -1,7 +1,8 @@
 //! hellodb Local Storage Engine
 //!
 //! Provides trait-based storage with in-memory and SQLite/SQLCipher backends.
-//! Includes a write-ahead log for crash recovery.
+//! Also exposes an experimental write-ahead log module (not yet integrated
+//! into the SqliteEngine mutation path).
 
 pub mod engine;
 pub mod error;

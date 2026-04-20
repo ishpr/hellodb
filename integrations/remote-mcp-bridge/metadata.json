@@ -1,0 +1,15 @@
+{
+  "id": "remote-mcp-bridge",
+  "title": "Remote MCP Bridge",
+  "summary": "Bridge recipes for connecting stdio-only MCP clients to remote hellodb MCP endpoints.",
+  "category": "transport",
+  "owner": "hellodb",
+  "last_updated": "2026-04-17",
+  "entrypoints": [
+    "README.md"
+  ],
+  "requires": [
+    "nodejs",
+    "mcp-client"
+  ]
+}

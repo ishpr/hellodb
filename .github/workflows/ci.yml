@@ -50,6 +50,16 @@ jobs:
           python3 -c "import json; json.load(open('plugin/hooks/hooks.json'))"
           python3 -c "import json; json.load(open('.claude-plugin/marketplace.json'))"
 
+      - name: Validate recipes and integrations metadata/docs
+        run: python3 scripts/validate-contributions.py
+
+  secret_scan:
+    name: secret scan
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gitleaks/gitleaks-action@v2
+
   # -----------------------------------------------------------------------
   # Gateway (TypeScript + Wrangler) lane: tsc strict + vitest.
   # -----------------------------------------------------------------------
@@ -80,7 +90,7 @@ jobs:
   # -----------------------------------------------------------------------
   build:
     name: build ${{ matrix.target }}
-    needs: [check, gateway]
+    needs: [check, gateway, secret_scan]
     if: github.event_name == 'push'
     strategy:
       fail-fast: false

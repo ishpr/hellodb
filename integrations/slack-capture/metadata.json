@@ -1,0 +1,15 @@
+{
+  "id": "slack-capture-integration",
+  "title": "Slack Capture Integration",
+  "summary": "Integration contract for forwarding Slack events into hellodb ingestion paths.",
+  "category": "chat-ingest",
+  "owner": "hellodb",
+  "last_updated": "2026-04-17",
+  "entrypoints": [
+    "README.md"
+  ],
+  "requires": [
+    "slack-app",
+    "hellodb"
+  ]
+}

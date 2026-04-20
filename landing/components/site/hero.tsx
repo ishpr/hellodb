@@ -21,7 +21,7 @@ export function Hero() {
           </h1>
 
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-fg-muted text-pretty">
-            Local-first. End-to-end encrypted. Branchable. Two sub-agents
+            Local-first. End-to-end encrypted. Branchable. Two plugin agents
             distill your sessions into facts — high-confidence ones merge
             auto, uncertain ones wait for one-click review. You own the
             keys, the data, and the bill.

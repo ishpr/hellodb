@@ -23,7 +23,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 const TITLE = "hellodb — sovereign memory for Claude Code";
 const DESCRIPTION =
-  "Local-first, end-to-end encrypted, branchable memory for Claude Code. Two Haiku sub-agents auto-merge confident facts and hold uncertain ones for review. You own the keys, the data, and the bill.";
+  "Local-first, end-to-end encrypted, branchable memory for Claude Code. Plugin-driven digest pipelines auto-merge confident facts and hold uncertain ones for review. You own the keys, the data, and the bill.";
 const SITE = "https://hellodb.dev";
 
 export const metadata: Metadata = {
@@ -126,8 +126,8 @@ const JSON_LD = {
         "End-to-end encrypted (Ed25519 + ChaCha20-Poly1305, SQLCipher)",
         "Branchable memory (git-like)",
         "Semantic recall with time-decay reinforcement",
-        "Memory sub-agents (memory-digest, memory-consolidate)",
-        "17+ MCP tools",
+        "Memory plugin agents (memory-digest, memory-consolidate)",
+        "22 MCP tools",
         "Cloudflare Workers AI + R2 via your own account",
         "Claude Code native memory interop (CLAUDE.md import)",
       ],

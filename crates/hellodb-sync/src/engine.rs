@@ -7,6 +7,7 @@
 use hellodb_core::Record;
 use hellodb_crypto::NamespaceKey;
 use hellodb_storage::StorageEngine;
+use std::collections::HashSet;
 
 use crate::backend::SyncBackend;
 use crate::conflict::{resolve_conflict, ConflictStrategy, SyncConflict};
@@ -56,9 +57,10 @@ impl<'a> SyncEngine<'a> {
     ///
     /// 1. Load or create manifest for this device+namespace
     /// 2. Query records with created_at_ms > last_push_cursor
-    /// 3. Bundle into a DeltaBundle, encrypt with ns_key
-    /// 4. Upload encrypted delta to backend
-    /// 5. Update manifest
+    /// 3. Include branch tombstones not yet pushed
+    /// 4. Bundle into a DeltaBundle, encrypt with ns_key
+    /// 5. Upload encrypted delta to backend
+    /// 6. Update manifest
     pub fn push(
         &mut self,
         namespace: &str,
@@ -79,7 +81,20 @@ impl<'a> SyncEngine<'a> {
             .filter(|r| r.created_at_ms > manifest.last_push_cursor)
             .collect();
 
-        if new_records.is_empty() {
+        let branch_state = self
+            .storage
+            .get_branch(branch)?
+            .ok_or_else(|| SyncError::Conflict(format!("branch not found: {branch}")))?;
+        let already_pushed: HashSet<String> = manifest.pushed_tombstones.iter().cloned().collect();
+        let new_tombstones: Vec<String> = branch_state
+            .changes
+            .iter()
+            .filter(|(_, is_present)| !**is_present)
+            .map(|(record_id, _)| record_id.clone())
+            .filter(|record_id| !already_pushed.contains(record_id))
+            .collect();
+
+        if new_records.is_empty() && new_tombstones.is_empty() {
             return Ok(PushResult {
                 records_pushed: 0,
                 tombstones_pushed: 0,
@@ -87,11 +102,17 @@ impl<'a> SyncEngine<'a> {
             });
         }
 
-        let to_cursor = new_records
-            .iter()
-            .map(|r| r.created_at_ms)
-            .max()
-            .unwrap_or(manifest.last_push_cursor);
+        let to_cursor = if new_records.is_empty() {
+            // Tombstone-only push: advance cursor explicitly so this delta
+            // gets a unique key and downstream pull cursors can progress.
+            std::cmp::max(manifest.last_push_cursor.saturating_add(1), now_ms)
+        } else {
+            new_records
+                .iter()
+                .map(|r| r.created_at_ms)
+                .max()
+                .unwrap_or(manifest.last_push_cursor)
+        };
 
         let record_count = new_records.len();
 
@@ -102,7 +123,7 @@ impl<'a> SyncEngine<'a> {
             from_cursor: manifest.last_push_cursor,
             to_cursor,
             records: new_records,
-            tombstones: Vec::new(), // TODO: tombstone tracking
+            tombstones: new_tombstones.clone(),
             created_at_ms: now_ms,
         };
 
@@ -117,12 +138,17 @@ impl<'a> SyncEngine<'a> {
 
         // Update manifest
         manifest.last_push_cursor = to_cursor;
+        manifest
+            .pushed_tombstones
+            .extend(new_tombstones.iter().cloned());
+        manifest.pushed_tombstones.sort();
+        manifest.pushed_tombstones.dedup();
         manifest.updated_at_ms = now_ms;
         self.save_manifest(&manifest, backend)?;
 
         Ok(PushResult {
             records_pushed: record_count,
-            tombstones_pushed: 0,
+            tombstones_pushed: new_tombstones.len(),
             delta_key,
         })
     }
@@ -139,11 +165,11 @@ impl<'a> SyncEngine<'a> {
         namespace: &str,
         branch: &str,
         ns_key: &NamespaceKey,
-        backend: &dyn SyncBackend,
+        backend: &mut dyn SyncBackend,
         strategy: ConflictStrategy,
         now_ms: u64,
     ) -> Result<PullResult, SyncError> {
-        let mut manifest = self.load_or_create_manifest_readonly(namespace, backend)?;
+        let mut manifest = self.load_or_create_manifest(namespace, backend)?;
 
         // List all deltas in this namespace
         let prefix = format!("{}/deltas/", namespace);
@@ -156,25 +182,44 @@ impl<'a> SyncEngine<'a> {
             .filter(|k| !k.starts_with(&my_prefix))
             .collect();
 
+        struct PendingDelta {
+            key: String,
+            sealed: SealedDelta,
+        }
+        let mut pending = Vec::new();
+        for key in remote_keys {
+            let blob = match backend.get_blob(&key)? {
+                Some(b) => b,
+                None => continue,
+            };
+            let sealed: SealedDelta = serde_json::from_slice(&blob)?;
+            if sealed.metadata.to_cursor <= manifest.last_pull_cursor {
+                continue;
+            }
+            pending.push(PendingDelta { key, sealed });
+        }
+        // Deterministic replay order across backends and devices.
+        pending.sort_by(|a, b| {
+            let a_cursor = a.sealed.metadata.to_cursor;
+            let b_cursor = b.sealed.metadata.to_cursor;
+            a_cursor
+                .cmp(&b_cursor)
+                .then_with(|| {
+                    a.sealed
+                        .metadata
+                        .device_id
+                        .cmp(&b.sealed.metadata.device_id)
+                })
+                .then_with(|| a.key.cmp(&b.key))
+        });
+
         let mut total_merged = 0;
         let mut all_conflicts = Vec::new();
         let mut deltas_applied = 0;
         let mut max_remote_cursor = manifest.last_pull_cursor;
 
-        for key in &remote_keys {
-            // Download and decrypt the delta
-            let blob = match backend.get_blob(key)? {
-                Some(b) => b,
-                None => continue,
-            };
-            let sealed: SealedDelta = serde_json::from_slice(&blob)?;
-
-            // Skip deltas we've already processed
-            if sealed.metadata.to_cursor <= manifest.last_pull_cursor {
-                continue;
-            }
-
-            let bundle = open_delta(&sealed, ns_key)?;
+        for item in pending {
+            let bundle = open_delta(&item.sealed, ns_key)?;
 
             // Merge records
             for remote_record in &bundle.records {
@@ -214,6 +259,14 @@ impl<'a> SyncEngine<'a> {
                 }
             }
 
+            // Apply tombstones after record upserts.
+            for tombstone_id in &bundle.tombstones {
+                if self.storage.get_record(tombstone_id, branch)?.is_some() {
+                    total_merged += 1;
+                }
+                self.storage.delete_record(tombstone_id, branch)?;
+            }
+
             // Track highest remote cursor
             if bundle.to_cursor > max_remote_cursor {
                 max_remote_cursor = bundle.to_cursor;
@@ -224,11 +277,7 @@ impl<'a> SyncEngine<'a> {
         // Update manifest
         manifest.last_pull_cursor = max_remote_cursor;
         manifest.updated_at_ms = now_ms;
-
-        // Note: pull takes &dyn SyncBackend (not &mut), so we can't persist
-        // the manifest back to the backend here. In a production system, the
-        // manifest would also be saved to local StorageEngine as a system record.
-        // The push() method handles remote manifest persistence since it has &mut.
+        self.save_manifest(&manifest, backend)?;
 
         Ok(PullResult {
             records_merged: total_merged,
@@ -314,6 +363,7 @@ impl<'a> SyncEngine<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::delta::seal_delta;
     use crate::memory_backend::MemorySyncBackend;
     use hellodb_core::Namespace;
     use hellodb_crypto::{KeyPair, MasterKey};
@@ -438,7 +488,7 @@ mod tests {
                     "commerce",
                     "commerce/main",
                     &ns_key,
-                    &backend,
+                    &mut backend,
                     ConflictStrategy::LastWriterWins,
                     4000,
                 )
@@ -488,7 +538,7 @@ mod tests {
                     "commerce",
                     "commerce/main",
                     &ns_key,
-                    &backend,
+                    &mut backend,
                     ConflictStrategy::LastWriterWins,
                     3000,
                 )
@@ -504,7 +554,7 @@ mod tests {
                     "commerce",
                     "commerce/main",
                     &ns_key,
-                    &backend,
+                    &mut backend,
                     ConflictStrategy::LastWriterWins,
                     3500,
                 )
@@ -556,7 +606,7 @@ mod tests {
                     "commerce",
                     "commerce/main",
                     &ns_key,
-                    &backend,
+                    &mut backend,
                     ConflictStrategy::LastWriterWins,
                     2500,
                 )
@@ -602,7 +652,7 @@ mod tests {
                     "commerce",
                     "commerce/main",
                     &ns_key,
-                    &backend,
+                    &mut backend,
                     ConflictStrategy::LastWriterWins,
                     5000,
                 )
@@ -638,7 +688,7 @@ mod tests {
                     "commerce",
                     "commerce/main",
                     &ns_key,
-                    &backend,
+                    &mut backend,
                     ConflictStrategy::LastWriterWins,
                     3000,
                 )
@@ -646,10 +696,7 @@ mod tests {
             assert_eq!(pull1.records_merged, 1);
         }
 
-        // Second pull — no new deltas so records_merged should be 0
-        // Note: manifest not persisted to backend in pull, so the engine
-        // will re-process. In a real system, the manifest would be saved.
-        // For this test, the records are idempotently skipped.
+        // Second pull — no new deltas because pull cursor is persisted.
         {
             let mut sync_b = SyncEngine::new(&mut engine_b, "device-b");
             let pull2 = sync_b
@@ -657,12 +704,13 @@ mod tests {
                     "commerce",
                     "commerce/main",
                     &ns_key,
-                    &backend,
+                    &mut backend,
                     ConflictStrategy::LastWriterWins,
                     4000,
                 )
                 .unwrap();
-            // Records already exist locally — idempotent skip
+            assert_eq!(pull2.records_merged, 0);
+            assert_eq!(pull2.deltas_applied, 0);
             assert_eq!(pull2.conflicts.len(), 0);
         }
     }
@@ -728,5 +776,182 @@ mod tests {
                 .unwrap();
             assert_eq!(r.records_pushed, 2); // Only new records
         }
+    }
+
+    #[test]
+    fn push_includes_new_tombstones_once() {
+        let owner = KeyPair::generate();
+        let mk = MasterKey::generate();
+        let ns_key = mk.derive_namespace_key("commerce");
+        let mut engine = setup_device("device-a", &owner);
+        let mut backend = MemorySyncBackend::new();
+
+        let rec = write_record(&mut engine, &owner, json!({"title": "Bowl"}), 1000);
+        {
+            let mut sync = SyncEngine::new(&mut engine, "device-a");
+            let first = sync
+                .push("commerce", "commerce/main", &ns_key, &mut backend, 2000)
+                .unwrap();
+            assert_eq!(first.records_pushed, 1);
+            assert_eq!(first.tombstones_pushed, 0);
+        }
+
+        engine
+            .delete_record(&rec.record_id, "commerce/main")
+            .unwrap();
+        {
+            let mut sync = SyncEngine::new(&mut engine, "device-a");
+            let second = sync
+                .push("commerce", "commerce/main", &ns_key, &mut backend, 3000)
+                .unwrap();
+            assert_eq!(second.records_pushed, 0);
+            assert_eq!(second.tombstones_pushed, 1);
+        }
+
+        // Tombstone was already published; third push is a no-op.
+        {
+            let mut sync = SyncEngine::new(&mut engine, "device-a");
+            let third = sync
+                .push("commerce", "commerce/main", &ns_key, &mut backend, 4000)
+                .unwrap();
+            assert_eq!(third.records_pushed, 0);
+            assert_eq!(third.tombstones_pushed, 0);
+            assert!(third.delta_key.is_empty());
+        }
+    }
+
+    #[test]
+    fn pull_applies_remote_tombstones() {
+        let owner = KeyPair::generate();
+        let mk = MasterKey::generate();
+        let ns_key = mk.derive_namespace_key("commerce");
+        let mut backend = MemorySyncBackend::new();
+
+        let mut engine_a = setup_device("device-a", &owner);
+        let rec = write_record(&mut engine_a, &owner, json!({"title": "Bowl"}), 1000);
+        {
+            let mut sync_a = SyncEngine::new(&mut engine_a, "device-a");
+            sync_a
+                .push("commerce", "commerce/main", &ns_key, &mut backend, 1500)
+                .unwrap();
+        }
+
+        let mut engine_b = setup_device("device-b", &owner);
+        {
+            let mut sync_b = SyncEngine::new(&mut engine_b, "device-b");
+            sync_b
+                .pull(
+                    "commerce",
+                    "commerce/main",
+                    &ns_key,
+                    &mut backend,
+                    ConflictStrategy::LastWriterWins,
+                    2000,
+                )
+                .unwrap();
+        }
+        assert!(engine_b
+            .get_record(&rec.record_id, "commerce/main")
+            .unwrap()
+            .is_some());
+
+        engine_a
+            .delete_record(&rec.record_id, "commerce/main")
+            .unwrap();
+        {
+            let mut sync_a = SyncEngine::new(&mut engine_a, "device-a");
+            let pushed = sync_a
+                .push("commerce", "commerce/main", &ns_key, &mut backend, 3000)
+                .unwrap();
+            assert_eq!(pushed.tombstones_pushed, 1);
+        }
+
+        {
+            let mut sync_b = SyncEngine::new(&mut engine_b, "device-b");
+            sync_b
+                .pull(
+                    "commerce",
+                    "commerce/main",
+                    &ns_key,
+                    &mut backend,
+                    ConflictStrategy::LastWriterWins,
+                    4000,
+                )
+                .unwrap();
+        }
+        assert!(engine_b
+            .get_record(&rec.record_id, "commerce/main")
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn pull_orders_deltas_by_cursor_before_merge() {
+        let owner = KeyPair::generate();
+        let mk = MasterKey::generate();
+        let ns_key = mk.derive_namespace_key("commerce");
+        let mut backend = MemorySyncBackend::new();
+
+        let rec = Record::new_with_timestamp(
+            &owner.signing,
+            "commerce.listing".into(),
+            "commerce".into(),
+            json!({"title": "Bowl"}),
+            None,
+            1000,
+        )
+        .unwrap();
+
+        // Old delta: add record at cursor 1000.
+        let add = DeltaBundle {
+            device_id: "device-z".into(),
+            namespace: "commerce".into(),
+            branch: "commerce/main".into(),
+            from_cursor: 0,
+            to_cursor: 1000,
+            records: vec![rec.clone()],
+            tombstones: vec![],
+            created_at_ms: 1001,
+        };
+        // New delta: tombstone same record at cursor 2000.
+        let del = DeltaBundle {
+            device_id: "device-a".into(),
+            namespace: "commerce".into(),
+            branch: "commerce/main".into(),
+            from_cursor: 1000,
+            to_cursor: 2000,
+            records: vec![],
+            tombstones: vec![rec.record_id.clone()],
+            created_at_ms: 2001,
+        };
+
+        // Intentionally write keys so lexicographic backend listing returns
+        // device-a/2000 BEFORE device-z/1000; cursor ordering must still win.
+        let del_bytes = serde_json::to_vec(&seal_delta(&del, &ns_key).unwrap()).unwrap();
+        backend
+            .put_blob("commerce/deltas/device-a/2000.delta", &del_bytes)
+            .unwrap();
+        let add_bytes = serde_json::to_vec(&seal_delta(&add, &ns_key).unwrap()).unwrap();
+        backend
+            .put_blob("commerce/deltas/device-z/1000.delta", &add_bytes)
+            .unwrap();
+
+        let mut receiver = setup_device("device-b", &owner);
+        let mut sync_b = SyncEngine::new(&mut receiver, "device-b");
+        let pull = sync_b
+            .pull(
+                "commerce",
+                "commerce/main",
+                &ns_key,
+                &mut backend,
+                ConflictStrategy::LastWriterWins,
+                3000,
+            )
+            .unwrap();
+        assert_eq!(pull.deltas_applied, 2);
+        assert!(receiver
+            .get_record(&rec.record_id, "commerce/main")
+            .unwrap()
+            .is_none());
     }
 }

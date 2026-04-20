@@ -3,7 +3,7 @@ import { Section } from "./section";
 export function BrainLoop() {
   const steps = [
     { label: "write", time: "0ms", body: "hellodb_note returns instantly. The agent never waits." },
-    { label: "digest", time: "Haiku sub-agent", body: "memory-digest extracts facts from episodes and scores each with a confidence." },
+    { label: "digest", time: "pluggable backend", body: "memory-digest extracts facts from episodes and scores each with a confidence." },
     { label: "score", time: "≥ 0.75 auto", body: "High confidence → merges straight to main. Low or superseding → held for review." },
     { label: "review", time: "edge cases only", body: "/hellodb:review shows only the uncertain ones. Empty most days." },
     { label: "recall", time: "semantic", body: "Future sessions hit merged facts via vector recall + decay reinforcement." },
@@ -19,7 +19,7 @@ export function BrainLoop() {
           You only review what&apos;s uncertain.
         </>
       }
-      lede="Two Haiku-backed sub-agents do the work. memory-digest scores every fact; high-confidence merges auto-land on main, low-confidence and superseding edits wait for your review. Default threshold 0.75, tunable in brain.toml. Zero extra infra — everything runs inside Claude Code on your subscription."
+      lede="Two plugin agents do the work. memory-digest scores every fact; high-confidence merges auto-land on main, low-confidence and superseding edits wait for your review. Default threshold 0.75, tunable in brain.toml. Backend can stay local/deterministic or use a configured remote model."
     >
       <div className="rounded-[var(--radius-card)] border border-border bg-bg-sunken/60 p-6 sm:p-8">
         {/* Desktop: horizontal track */}

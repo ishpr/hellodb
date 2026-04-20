@@ -1,0 +1,12 @@
+{
+  "id": "recipe-id",
+  "title": "Recipe Title",
+  "summary": "One-line summary of the recipe outcome.",
+  "category": "workflow",
+  "owner": "hellodb",
+  "last_updated": "2026-04-17",
+  "entrypoints": [
+    "README.md"
+  ],
+  "requires": []
+}

@@ -1,6 +1,6 @@
 ---
 description: |
-  Run the memory-digest sub-agent on recent episodes from claude.episodes and
+  Run the memory-digest plugin agent on recent episodes from claude.episodes and
   write the extracted facts to a draft branch in claude.facts. Use when the
   user says "digest now", "run memory digest", or when invoked as
   /hellodb:digest-now. Also fires from the Stop hook, via a background
@@ -29,7 +29,7 @@ You are running the memory-digest pipeline against hellodb. Your job:
 
 4. **Bail if nothing to do.** If `hellodb_tail` returned 0 entries, print `{"status": "no_episodes"}` and stop. Don't invoke the agent for an empty input.
 
-5. **Invoke the memory-digest sub-agent.** Use the `Task` tool with:
+5. **Invoke the memory-digest plugin agent.** Use the `Task` tool with:
    - `subagent_type`: `memory-digest`
    - `description`: `digest episodes batch`
    - `prompt`: Hand it the JSON payload described in `plugin/agents/memory-digest.md`:

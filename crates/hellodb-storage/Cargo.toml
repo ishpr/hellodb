@@ -1,6 +1,6 @@
 [package]
 name = "hellodb-storage"
-description = "hellodb local storage: WAL, in-memory and SQLite/SQLCipher backends"
+description = "hellodb local storage: in-memory + SQLite/SQLCipher engines with experimental WAL utilities"
 version.workspace = true
 edition.workspace = true
 

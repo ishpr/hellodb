@@ -1,6 +1,6 @@
 ---
 description: |
-  Run the memory-consolidate sub-agent over the current main-branch facts to
+  Run the memory-consolidate plugin agent over the current main-branch facts to
   dedupe, resolve contradictions, archive stale entries, and reinforce
   actively-referenced facts. Use when the user says "consolidate memory",
   "clean up memory", or when invoked as /hellodb:consolidate-now.
@@ -22,7 +22,7 @@ Run the memory-consolidate pipeline:
    `mcp__hellodb__hellodb_get_metadata` (best-effort; skip on error — a
    missing metadata row means the fact has never been reinforced).
 
-3. **Invoke the memory-consolidate sub-agent.** Use the `Task` tool with:
+3. **Invoke the memory-consolidate plugin agent.** Use the `Task` tool with:
    - `subagent_type`: `memory-consolidate`
    - `description`: `consolidate facts`
    - `prompt`: The JSON payload per `plugin/agents/memory-consolidate.md`:

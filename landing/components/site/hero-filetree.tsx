@@ -6,7 +6,7 @@ export function HeroFiletree() {
     { name: "branches/main/", note: "auto-merged facts (≥ 0.75)" },
     { name: "branches/digest-*/", note: "uncertain — awaiting review", tone: "accent" },
     { name: "brain.toml", note: "digest gates, decay tuning" },
-    { name: "wal/", note: "write-ahead log" },
+    { name: "wal/", note: "experimental WAL utilities" },
   ];
 
   return (

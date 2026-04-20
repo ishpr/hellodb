@@ -18,6 +18,13 @@ pub struct SyncManifest {
     pub last_push_cursor: u64,
     /// Timestamp of the most recently pulled delta.
     pub last_pull_cursor: u64,
+    /// Tombstone IDs already pushed by this device.
+    ///
+    /// Branch changes do not currently carry per-change timestamps, so we keep
+    /// a small manifest-side set of tombstones we've already emitted to avoid
+    /// repeatedly re-sending historical deletions on every push.
+    #[serde(default)]
+    pub pushed_tombstones: Vec<String>,
     /// When this manifest was last updated.
     pub updated_at_ms: u64,
 }
@@ -30,6 +37,7 @@ impl SyncManifest {
             namespace: namespace.into(),
             last_push_cursor: 0,
             last_pull_cursor: 0,
+            pushed_tombstones: Vec::new(),
             updated_at_ms: 0,
         }
     }
@@ -55,6 +63,7 @@ mod tests {
             namespace: "commerce".into(),
             last_push_cursor: 5000,
             last_pull_cursor: 4500,
+            pushed_tombstones: vec!["r1".into(), "r2".into()],
             updated_at_ms: 6000,
         };
 
@@ -68,6 +77,7 @@ mod tests {
         let m = SyncManifest::new("d1", "ns");
         assert_eq!(m.last_push_cursor, 0);
         assert_eq!(m.last_pull_cursor, 0);
+        assert!(m.pushed_tombstones.is_empty());
         assert_eq!(m.updated_at_ms, 0);
     }
 }

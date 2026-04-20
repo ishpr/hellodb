@@ -12,15 +12,17 @@ Ships as a Claude Code plugin with:
 - **5 skills** that Claude triggers automatically (`/hellodb:memorize`,
   `/hellodb:recall`, `/hellodb:review`, `/hellodb:digest-now`,
   `/hellodb:consolidate-now`)
-- **2 sub-agents** (`memory-digest`, `memory-consolidate`) running on Haiku
-  by default — cheap, fast, offline-capable
+- **2 plugin agents** (`memory-digest`, `memory-consolidate`) with
+  Haiku-tuned prompts for low-cost session digestion/consolidation
 - **Stop hook** that fires the digest pipeline in the background after
   every session, idempotent, cool-down-gated
-- **23 MCP tools** exposing every primitive (namespaces, schemas,
+- **22 MCP tools** exposing every primitive (namespaces, schemas,
   records, branches, merge, tail cursor, reinforcement metadata, vector
   upsert/recall, embed, ingest, and `hellodb_find_relevant_memories` —
   Claude Code-shaped retrieval with graceful fallback from semantic to
-  keyword ranking)
+  keyword ranking). Current MCP server auth model is local single-identity
+  execution; multi-principal consent/delegation flows remain library-level
+  primitives.
 
 ---
 
@@ -101,6 +103,98 @@ filter-based (non-semantic) recall.
 
 ---
 
+## Dual-path onboarding
+
+Pick one path per machine:
+
+### Path A: local-first (default)
+
+1. Install:
+
+```sh
+curl -fsSL hellodb.dev/install | sh
+```
+
+2. Initialize and verify:
+
+```sh
+hellodb status
+hellodb ingest --from-claudemd
+hellodb recall --top 8
+```
+
+### Path B: hosted-optional add-ons
+
+Use this when you want managed embeddings/sync in your own cloud account.
+
+1. Deploy Cloudflare gateway:
+
+```sh
+make setup-cloudflare
+```
+
+2. Enable OpenRouter digestion backend (optional):
+
+```sh
+export HELLODB_BRAIN_OPENROUTER_API_KEY=...
+```
+
+3. Update `brain.toml`:
+
+```toml
+[digest]
+backend = "openrouter"
+```
+
+### Credential tracker (recommended)
+
+Store these once so setup can be repeated consistently:
+
+- `HELLODB_HOME`
+- `HELLODB_EMBED_GATEWAY_URL`
+- `HELLODB_EMBED_GATEWAY_TOKEN` (or keychain reference)
+- `HELLODB_BRAIN_OPENROUTER_API_KEY` (if using openrouter digest)
+- Cloudflare worker name + R2 bucket name
+
+### Connector snippets
+
+- **Claude Desktop (remote connector):**
+
+  Add a custom connector URL to your exposed MCP endpoint, for example:
+
+```text
+https://YOUR_HOST/hellodb-mcp?key=YOUR_ACCESS_KEY
+```
+
+- **Claude Code (local stdio):**
+
+```sh
+claude mcp add hellodb $(command -v hellodb)
+```
+
+- **Codex/Cursor-style remote bridge:**
+  use `supergateway` bridge:
+
+```json
+{
+  "mcpServers": {
+    "hellodb-remote": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "supergateway",
+        "--streamableHttp",
+        "https://YOUR_HOST/hellodb-mcp?key=YOUR_ACCESS_KEY"
+      ]
+    }
+  }
+}
+```
+
+See `integrations/remote-mcp-bridge/README.md` for additional bridge options.
+
+---
+
 ## The memory loop
 
 ```
@@ -111,8 +205,8 @@ filter-based (non-semantic) recall.
   │                  │  agent-author writes       │       │   session end) │
   └──────────────────┘                            ▼       └──┬─────────────┘
           ▲                            ┌────────────────┐    │ digest via
-          │                            │  claude.       │    │ memory-digest
-          │ /hellodb:recall            │  episodes      │    │ sub-agent (Haiku)
+  │                            │  claude.       │    │ memory-digest
+  │ /hellodb:recall            │  episodes      │    │ digest backend
           │ (auto-triggers)            │  (raw)         │    ▼
           │                            └────────────────┘  ┌────────────────┐
           │                                                │  claude.facts/ │
@@ -133,8 +227,25 @@ per-namespace with ChaCha20-Poly1305 via [`hellodb-crypto::NamespaceKey`].
 
 **Reversed-dependency pattern:** the primary agent never triggers memory
 operations. A separate `hellodb-brain` daemon tails episodes and digests
-them via a sub-agent that runs on the user's own Claude Code subscription
-(or optionally, on their Cloudflare Worker).
+them via pluggable backends (`mock` for deterministic local runs, or
+`openrouter` when configured for LLM-backed extraction).
+
+Enable `openrouter` digestion by setting in `brain.toml`:
+
+```toml
+[digest]
+backend = "openrouter"
+```
+
+and exporting:
+
+```sh
+export HELLODB_BRAIN_OPENROUTER_API_KEY=...
+# optional:
+export HELLODB_BRAIN_OPENROUTER_MODEL=openai/gpt-4o-mini
+export HELLODB_BRAIN_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+export HELLODB_BRAIN_OPENROUTER_FALLBACK_TO_MOCK=1
+```
 
 ---
 
@@ -145,7 +256,7 @@ crates/
 ├── hellodb-crypto     Ed25519, X25519, ChaCha20-Poly1305, BLAKE3 primitives
 ├── hellodb-core       Record model, namespaces, schemas, branches, merge
 ├── hellodb-storage    SQLCipher + MemoryEngine + tail-cursor + metadata sidecar
-├── hellodb-auth       Consent proofs, delegation credentials, access gate
+├── hellodb-auth       Consent/delegation/access primitives (library layer)
 ├── hellodb-query      Filter / sort / cursor-paginate query engine
 ├── hellodb-sync       Encrypted-delta sync: FileSystem, Memory, GatewayBackend
 ├── hellodb-vector     Per-namespace encrypted ANN index with POSIX flock

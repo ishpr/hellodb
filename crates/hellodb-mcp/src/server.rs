@@ -64,6 +64,11 @@ impl Server {
             "serverInfo": {
                 "name": "hellodb-mcp",
                 "version": env!("CARGO_PKG_VERSION"),
+                // Current MCP transport model is local single-user execution.
+                // Delegation/consent primitives live in hellodb-auth and
+                // QueryEngine, but this server currently executes requests as
+                // the local identity, not remote principals.
+                "auth_model": "single_identity_local_owner",
             }
         })
     }

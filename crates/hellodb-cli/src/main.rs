@@ -161,8 +161,9 @@ min_episodes_since_last_run = 5
 max_episodes_per_pass = 200
 
 [digest]
-# MVP backend — deterministic, no LLM. See crates/hellodb-brain/src/digest.rs
-# for how to wire a real LLM backend.
+# Supported backends:
+# - mock       (deterministic, no remote model)
+# - openrouter (set HELLODB_BRAIN_OPENROUTER_API_KEY)
 backend = "mock"
 fact_schema_id = "brain.fact"
 # Confidence at or above which facts auto-merge to main. Set to 1.1 to hold
@@ -290,7 +291,7 @@ fn cmd_recall(args: &[String]) -> Result<i32, String> {
     let mut format = "md".to_string();
     let mut half_life_days: f64 = 7.0;
     // Default to quiet because this command is designed to be wired into
-    // hooks and sub-agent pipelines — stderr noise during session bootstrap
+    // hooks and plugin-agent pipelines — stderr noise during session bootstrap
     // would be visible to the user. Opt into chatty mode with --verbose when
     // debugging from the terminal.
     let mut quiet = true;

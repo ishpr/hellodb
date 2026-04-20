@@ -1,0 +1,14 @@
+{
+  "id": "claude-memory-import",
+  "title": "Claude Memory Import",
+  "summary": "Import existing Claude Code memory markdown into project-scoped hellodb namespaces.",
+  "category": "import",
+  "owner": "hellodb",
+  "last_updated": "2026-04-17",
+  "entrypoints": [
+    "README.md"
+  ],
+  "requires": [
+    "hellodb"
+  ]
+}

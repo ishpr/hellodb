@@ -330,7 +330,7 @@ fn sync_push_pull_converge() {
                 "commerce",
                 "commerce/main",
                 &ns_key,
-                &backend,
+                &mut backend,
                 ConflictStrategy::LastWriterWins,
                 4000,
             )
@@ -420,7 +420,7 @@ fn sync_bidirectional_convergence() {
                 "commerce",
                 "commerce/main",
                 &ns_key,
-                &backend,
+                &mut backend,
                 ConflictStrategy::LastWriterWins,
                 3000,
             )
@@ -434,7 +434,7 @@ fn sync_bidirectional_convergence() {
                 "commerce",
                 "commerce/main",
                 &ns_key,
-                &backend,
+                &mut backend,
                 ConflictStrategy::LastWriterWins,
                 3500,
             )
@@ -507,7 +507,7 @@ fn sync_encryption_isolation() {
         "commerce",
         "commerce/main",
         &wrong_key,
-        &backend,
+        &mut backend,
         ConflictStrategy::LastWriterWins,
         3000,
     );
@@ -584,7 +584,7 @@ fn query_after_sync() {
                 "commerce",
                 "commerce/main",
                 &ns_key,
-                &backend,
+                &mut backend,
                 ConflictStrategy::LastWriterWins,
                 6000,
             )
@@ -699,7 +699,7 @@ fn incremental_sync_with_query() {
                 "commerce",
                 "commerce/main",
                 &ns_key,
-                &backend,
+                &mut backend,
                 ConflictStrategy::LastWriterWins,
                 4000,
             )
@@ -737,7 +737,7 @@ fn incremental_sync_with_query() {
                 "commerce",
                 "commerce/main",
                 &ns_key,
-                &backend,
+                &mut backend,
                 ConflictStrategy::LastWriterWins,
                 8000,
             )

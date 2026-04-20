@@ -1,0 +1,16 @@
+{
+  "id": "slack-capture",
+  "title": "Slack Capture",
+  "summary": "Capture Slack channel messages and ingest them into hellodb memory episodes.",
+  "category": "capture",
+  "owner": "hellodb",
+  "last_updated": "2026-04-17",
+  "entrypoints": [
+    "README.md",
+    "verify.sh"
+  ],
+  "requires": [
+    "hellodb",
+    "slack-app"
+  ]
+}

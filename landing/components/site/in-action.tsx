@@ -9,7 +9,7 @@ export function InAction() {
           One line in chat. <span className="italic text-fg-muted">A fact for next session.</span>
         </>
       }
-      lede="The /hellodb:memorize skill is loaded into every Claude Code session by the plugin. You don't think about it; the agent recognizes durable facts and writes them. A Haiku-backed memory sub-agent takes it from there."
+      lede="The /hellodb:memorize skill is loaded into every Claude Code session by the plugin. You don't think about it; the agent recognizes durable facts and writes them. The digest backend takes it from there."
     >
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="min-w-0 rounded-[var(--radius-card)] border border-border bg-bg-sunken/60 p-6">

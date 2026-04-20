@@ -166,7 +166,7 @@ export default function Post() {
               </p>
               <p>
                 The digest runs <em>out of band</em>: after your session ends,
-                a Haiku sub-agent reads the raw episode tail and writes
+                a digest backend reads the raw episode tail and writes
                 consolidated facts to a draft branch (<code>claude.facts/
                 digest-&lt;ts&gt;</code>). High-confidence facts auto-merge to{" "}
                 <code>main</code>. Low-confidence or contradictory ones stay on
@@ -288,7 +288,7 @@ export default function Post() {
                 </li>
                 <li>
                   <strong>Brain daemon</strong> tails the episode namespace and
-                  digests new material via a Haiku memory-digest sub-agent.
+                  digests new material via the configured digest backend.
                   High-confidence facts auto-merge; low-confidence or
                   contradictory ones stay on a draft branch for review.
                 </li>

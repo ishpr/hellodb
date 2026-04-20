@@ -69,9 +69,15 @@ impl Default for LimitsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DigestConfig {
-    /// Which digest backend to use. MVP ships "mock" — an LLM-free heuristic
-    /// that proves the pipeline end-to-end. Real LLM backends (openai,
-    /// anthropic, local-http) are future work.
+    /// Which digest backend to use.
+    ///
+    /// Supported:
+    /// - `mock`: LLM-free heuristic backend for deterministic/offline runs.
+    /// - `openrouter`: remote LLM backend via OpenRouter chat completions.
+    ///
+    /// `openrouter` requires HELLODB_BRAIN_OPENROUTER_API_KEY and accepts
+    /// optional HELLODB_BRAIN_OPENROUTER_MODEL /
+    /// HELLODB_BRAIN_OPENROUTER_BASE_URL overrides.
     #[serde(default = "default_backend")]
     pub backend: String,
     /// Schema id used when writing consolidated facts. Must live in the
