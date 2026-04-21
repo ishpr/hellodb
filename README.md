@@ -234,10 +234,25 @@ hellodb integrate codex
 codex mcp add hellodb -- "$(command -v hellodb-mcp)"
 ```
 
+  **Codex UI (“Connect to a custom MCP”):** pick **STDIO** (not Streamable HTTP
+  for the local binary), then fill the form like this:
+
+  | Field | Value |
+  |-------|--------|
+  | **Name** | `hellodb` (or any label) |
+  | **Command to launch** | Absolute path to `hellodb-mcp`. Run `command -v hellodb-mcp` in a terminal (macOS/Linux often `/usr/local/bin/hellodb-mcp` or `~/.local/bin/hellodb-mcp`; Windows installer usually `%USERPROFILE%\.hellodb\bin\hellodb-mcp.exe`). |
+  | **Arguments** | *(none — leave empty)* |
+  | **Working directory** | *(optional — usually leave blank)* |
+  | **Environment variables** | Only if needed: `HELLODB_HOME` → your data dir (default `~/.hellodb`) |
+
+  `hellodb-mcp` uses **stdin/stdout** for MCP; it does not take subcommands in
+  **Arguments** (unlike examples like `openai-dev-mcp serve-sqlite`).
+
   If Codex can’t resolve your PATH when it spawns the process, use the absolute
   path from `command -v hellodb-mcp` (often `/usr/local/bin/hellodb-mcp`). For
-  **remote** MCP, use Codex’s HTTP/streamable options with a URL you control
-  (same shape as Claude Desktop above), not a hellodb-owned public endpoint.
+  **Streamable HTTP** in the same UI, use a **URL you host** (gateway / bridge)
+  and Codex’s auth options per [Codex MCP](https://developers.openai.com/codex/mcp)—
+  not a hellodb-owned public endpoint.
 
 - **Cursor / other hosts (remote via bridge):** e.g. `supergateway` wrapping
   your HTTPS MCP endpoint:
