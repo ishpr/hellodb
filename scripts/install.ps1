@@ -20,6 +20,7 @@
 #   $env:HELLODB_HOME           Data dir (default: ~\.hellodb)
 #   $env:HELLODB_SKIP_INIT      "1" to skip `hellodb init`
 #   $env:HELLODB_SKIP_PLUGIN    "1" to skip Claude Code plugin registration
+#   $env:HELLODB_SKIP_CODEX     "1" to skip OpenAI Codex MCP registration
 
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -192,6 +193,26 @@ try {
     Warn "install Claude Code, then run: claude plugin install hellodb@hellodb"
   }
 
+  # ----- OpenAI Codex MCP (stdio) ---------------------------------------
+
+  if ($env:HELLODB_SKIP_CODEX -eq "1") {
+    Info "skipping Codex MCP registration (HELLODB_SKIP_CODEX=1)"
+  } elseif (Get-Command codex -ErrorAction SilentlyContinue) {
+    $McpExe = Join-Path $InstallDir "hellodb-mcp.exe"
+    & codex mcp get hellodb 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      Ok "Codex: MCP server 'hellodb' already configured"
+    } else {
+      & codex mcp add hellodb -- $McpExe 2>&1 | Out-Null
+      if ($LASTEXITCODE -eq 0) {
+        Ok "Codex: registered stdio MCP → $McpExe"
+      } else {
+        Warn "Codex: 'codex mcp add' failed — run manually:"
+        Warn "  codex mcp add hellodb -- $McpExe"
+      }
+    }
+  }
+
 } finally {
   if (Test-Path $Tmp) { Remove-Item -Recurse -Force $Tmp }
 }
@@ -201,8 +222,9 @@ Ok "done."
 Write-Host ""
 Write-Host "next:"
 Write-Host "  1. open a NEW PowerShell window so the updated PATH is visible"
-Write-Host "  2. restart Claude Code to pick up the plugin"
-Write-Host "  3. optional Cloudflare embeddings:"
+Write-Host "  2. restart Claude Code to pick up the plugin (if you use it)"
+Write-Host "  3. Codex: MCP auto-registered if 'codex' was on PATH; else: hellodb integrate codex"
+Write-Host "  4. optional Cloudflare embeddings:"
 Write-Host "       git clone https://github.com/$Repo"
 Write-Host "       cd hellodb"
 Write-Host "       make setup-cloudflare     # requires make + bash (Git for Windows provides both)"

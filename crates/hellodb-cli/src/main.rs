@@ -41,6 +41,7 @@ fn main() {
         Some("ingest") => cmd_ingest(&args[1..]),
         Some("mcp") => cmd_exec_sibling("hellodb-mcp", &args[1..]),
         Some("brain") => cmd_exec_sibling("hellodb-brain", &args[1..]),
+        Some("integrate") => cmd_integrate(&args[1..]),
         Some("doctor") => cmd_doctor(),
         Some("-h") | Some("--help") | Some("help") | None => {
             print_help();
@@ -79,6 +80,7 @@ fn print_help() {
     println!("                    --source PATH (explicit memory dir), --dry-run");
     println!("  mcp        run the MCP server (stdio transport; for Claude Code)");
     println!("  brain      run one passive-memory digest pass (see --help for flags)");
+    println!("  integrate  wire hellodb-mcp into a host (currently: codex)");
     println!("  doctor     diagnose common setup issues");
     println!();
     println!("environment:");
@@ -132,6 +134,7 @@ fn cmd_init(_args: &[String]) -> Result<i32, String> {
             "next_steps": [
                 "hellodb status",
                 "claude mcp add hellodb ${path_to_hellodb_binary_or_hellodb_mcp}",
+                "hellodb integrate codex   # if you use OpenAI Codex instead",
                 "hellodb brain --status",
             ],
         })
@@ -904,24 +907,39 @@ fn cmd_exec_sibling(name: &str, args: &[String]) -> Result<i32, String> {
     Ok(status.code().unwrap_or(1))
 }
 
+fn sibling_filenames(base: &str) -> Vec<String> {
+    #[cfg(windows)]
+    {
+        vec![format!("{base}.exe"), base.to_string()]
+    }
+    #[cfg(not(windows))]
+    {
+        vec![base.to_string()]
+    }
+}
+
 /// Find a sibling binary named `name`. Search order:
 /// 1. Same directory as the current executable (plugin bundle case)
-/// 2. `$PATH`
+/// 2. `PATH` (`PATH`/`Path` split is OS-aware)
 fn locate_sibling(name: &str) -> Result<PathBuf, String> {
+    let names = sibling_filenames(name);
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let cand = dir.join(name);
-            if cand.exists() {
-                return Ok(cand);
+            for n in &names {
+                let cand = dir.join(n);
+                if cand.exists() {
+                    return Ok(cand);
+                }
             }
         }
     }
-    // PATH fallback via `which`-style scan.
     if let Ok(path_var) = std::env::var("PATH") {
-        for entry in path_var.split(':') {
-            let cand = Path::new(entry).join(name);
-            if cand.exists() {
-                return Ok(cand);
+        for entry in std::env::split_paths(&path_var) {
+            for n in &names {
+                let cand = entry.join(n);
+                if cand.exists() {
+                    return Ok(cand);
+                }
             }
         }
     }
@@ -930,6 +948,54 @@ fn locate_sibling(name: &str) -> Result<PathBuf, String> {
          or on $PATH. if you're running from the workspace, try `cargo build --release` \
          first."
     ))
+}
+
+/// Register `hellodb-mcp` with OpenAI Codex (`codex mcp add`), if Codex CLI is installed.
+fn cmd_integrate(args: &[String]) -> Result<i32, String> {
+    match args.first().map(String::as_str) {
+        Some("codex") => {
+            let mcp = locate_sibling("hellodb-mcp")?;
+            let exists = Command::new("codex")
+                .args(["mcp", "get", "hellodb"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if exists {
+                println!(
+                    "Codex MCP server 'hellodb' already configured → {}",
+                    mcp.display()
+                );
+                return Ok(0);
+            }
+            let status = Command::new("codex")
+                .args(["mcp", "add", "hellodb", "--"])
+                .arg(&mcp)
+                .status()
+                .map_err(|e| {
+                    format!(
+                        "could not run `codex`: {e}. install the OpenAI Codex CLI (https://developers.openai.com/codex/) and ensure it is on PATH."
+                    )
+                })?;
+            if status.success() {
+                println!("registered Codex MCP server 'hellodb' → {}", mcp.display());
+                Ok(0)
+            } else {
+                Err(format!(
+                    "`codex mcp add` exited with status {:?}. if this server already exists, try: codex mcp get hellodb",
+                    status.code()
+                ))
+            }
+        }
+        _ => {
+            eprintln!("usage: hellodb integrate codex");
+            eprintln!();
+            eprintln!("Registers hellodb-mcp as a stdio MCP server in Codex (~/.codex/config.toml).");
+            eprintln!("Requires the `codex` CLI on PATH. Same as: codex mcp add hellodb -- <path-to-hellodb-mcp>");
+            Ok(2)
+        }
+    }
 }
 
 // --- doctor ---------------------------------------------------------------

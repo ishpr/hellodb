@@ -17,6 +17,7 @@
 #     HELLODB_HOME          Data dir (default: ~/.hellodb, passed through to hellodb)
 #     HELLODB_SKIP_INIT     Set to 1 to skip `hellodb init` (no DB bootstrap)
 #     HELLODB_SKIP_PLUGIN   Set to 1 to skip Claude Code plugin registration
+#     HELLODB_SKIP_CODEX    Set to 1 to skip OpenAI Codex MCP registration
 #
 # POSIX sh on purpose — works on macOS default /bin/sh (bash 3.2) and
 # on minimal Alpine-style busybox sh. No bash-isms.
@@ -228,6 +229,22 @@ else
   warn "install Claude Code, then run: claude plugin install hellodb@hellodb"
 fi
 
+# ----- OpenAI Codex MCP (stdio) -------------------------------------------
+
+if [ "${HELLODB_SKIP_CODEX:-0}" = "1" ]; then
+  info "skipping Codex MCP registration (HELLODB_SKIP_CODEX=1)"
+elif command -v codex >/dev/null 2>&1; then
+  MCP_BIN="$INSTALL_DIR/hellodb-mcp"
+  if codex mcp get hellodb >/dev/null 2>&1; then
+    ok "Codex: MCP server 'hellodb' already configured"
+  elif codex mcp add hellodb -- "$MCP_BIN" >/dev/null 2>&1; then
+    ok "Codex: registered stdio MCP → $MCP_BIN"
+  else
+    warn "Codex: 'codex mcp add' failed — run manually:"
+    warn "  codex mcp add hellodb -- \"$MCP_BIN\""
+  fi
+fi
+
 # ----- done ---------------------------------------------------------------
 
 printf "\n"
@@ -235,8 +252,9 @@ printf "%s %s\n" "$(color '1;32' '✓')" "done."
 printf "\n"
 printf "next:\n"
 printf "  1. open a new terminal (or: source your shell rc) so hellodb is on PATH\n"
-printf "  2. restart Claude Code to pick up the plugin\n"
-printf "  3. optional: enable Cloudflare embeddings + R2 sync\n"
+printf "  2. restart Claude Code to pick up the plugin (if you use it)\n"
+printf "  3. Codex: MCP was auto-registered if 'codex' was on PATH; else: hellodb integrate codex\n"
+printf "  4. optional: enable Cloudflare embeddings + R2 sync\n"
 printf "         hellodb                    # see subcommands\n"
 printf "         git clone https://github.com/%s && cd hellodb && make setup-cloudflare\n" "$REPO"
 printf "\n"

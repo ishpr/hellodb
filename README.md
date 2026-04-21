@@ -67,9 +67,13 @@ That's it. The installer:
 4. Runs `hellodb init` to generate your identity key + encrypted DB at
    `~/.hellodb/` (mode 0600 on the key)
 5. Registers the plugin with Claude Code if `claude` is on your PATH
+6. Registers **stdio MCP** with OpenAI Codex if `codex` is on your PATH
+   (`HELLODB_SKIP_CODEX=1` skips this)
 
-Restart Claude Code once after install. The plugin's skills become visible
-to the session automatically.
+Restart Claude Code once after install if you use it; the plugin’s skills
+show up on the next session. **Codex users:** if `codex` was on PATH during
+install, MCP is already wired — otherwise run **`hellodb integrate codex`**
+after installing the Codex CLI.
 
 ### First session
 
@@ -182,9 +186,11 @@ Store these once so setup can be repeated consistently:
 | **OpenAI Codex — MCP** (config format, `codex mcp add`, HTTP MCP) | [`developers.openai.com/codex/mcp`](https://developers.openai.com/codex/mcp) |
 
 There is **no special “MCP URL” for local Codex**: you install the binaries,
-then point Codex at the **`hellodb-mcp` executable** (stdio). A `https://…`
-URL only applies if **you** host a remote MCP endpoint (gateway / bridge) and
-configure Codex for **streamable HTTP** per OpenAI’s docs.
+then Codex runs **`hellodb-mcp`** over stdio. The **same** `curl … | sh` line
+does that automatically when `codex` is already on your PATH; if you install
+Codex later, one follow-up is enough: **`hellodb integrate codex`**. A
+`https://…` URL only applies if **you** host a remote MCP endpoint (gateway /
+bridge) and configure Codex for **streamable HTTP** per OpenAI’s docs.
 
 These examples are **Claude- and Cursor-flavored** in places because their MCP
 UIs are well documented; the underlying contract is **generic MCP**—any
@@ -215,11 +221,16 @@ https://YOUR_HOST/hellodb-mcp?key=YOUR_ACCESS_KEY
 claude mcp add hellodb "$(command -v hellodb-mcp)"
 ```
 
-- **OpenAI Codex (local stdio):** install first (`curl -fsSL hellodb.dev/install | sh`),
-  then register the server (writes `~/.codex/config.toml` by default). See
+- **OpenAI Codex (local stdio):** prefer **one command** —
+  `curl -fsSL hellodb.dev/install | sh` — the installer calls
+  `codex mcp add hellodb -- <path>` when `codex` is on PATH. If you already
+  ran install without Codex, run **`hellodb integrate codex`** (resolves
+  `hellodb-mcp` next to `hellodb` or on PATH). Manual equivalent and details:
   [Codex MCP](https://developers.openai.com/codex/mcp).
 
 ```sh
+hellodb integrate codex
+# or, by hand:
 codex mcp add hellodb -- "$(command -v hellodb-mcp)"
 ```
 
@@ -359,6 +370,7 @@ hellodb ingest               import Claude Code auto-memory markdown files
                              flags: --from-claudemd (scan ~/.claude/projects/*/memory/*.md),
                                     --source PATH (explicit dir), --dry-run
 hellodb mcp                  run the MCP server (stdio; for Claude Code)
+hellodb integrate codex      register hellodb-mcp in Codex (~/.codex/config.toml)
 hellodb brain [--status]     run one passive-memory digest pass
                              flags: --dry-run, --force, --status, --init-config
 hellodb doctor               diagnose config / permission / DB-open issues
