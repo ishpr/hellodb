@@ -173,9 +173,22 @@ Store these once so setup can be repeated consistently:
 
 ### Connector snippets
 
-These examples are **Claude- and Cursor-flavored** because their MCP UIs are
-well documented; the underlying contract is **generic MCP**—any compliant
-client can use the same binary or URL.
+**Links to share**
+
+| What | URL |
+|------|-----|
+| **MCP setup (all hosts)** — stdio paths, Claude, Cursor, Codex, remote URL | `https://github.com/ishpr/hellodb#connector-snippets` |
+| **Install script** (downloads `hellodb`, `hellodb-mcp`, `hellodb-brain`) | `https://hellodb.dev/install` |
+| **OpenAI Codex — MCP** (config format, `codex mcp add`, HTTP MCP) | [`developers.openai.com/codex/mcp`](https://developers.openai.com/codex/mcp) |
+
+There is **no special “MCP URL” for local Codex**: you install the binaries,
+then point Codex at the **`hellodb-mcp` executable** (stdio). A `https://…`
+URL only applies if **you** host a remote MCP endpoint (gateway / bridge) and
+configure Codex for **streamable HTTP** per OpenAI’s docs.
+
+These examples are **Claude- and Cursor-flavored** in places because their MCP
+UIs are well documented; the underlying contract is **generic MCP**—any
+compliant client can use the same binary or URL.
 
 - **Any MCP host (local stdio):** configure your client to run the installed
   binary as the MCP server command (no args required):
@@ -201,6 +214,19 @@ https://YOUR_HOST/hellodb-mcp?key=YOUR_ACCESS_KEY
 ```sh
 claude mcp add hellodb "$(command -v hellodb-mcp)"
 ```
+
+- **OpenAI Codex (local stdio):** install first (`curl -fsSL hellodb.dev/install | sh`),
+  then register the server (writes `~/.codex/config.toml` by default). See
+  [Codex MCP](https://developers.openai.com/codex/mcp).
+
+```sh
+codex mcp add hellodb -- "$(command -v hellodb-mcp)"
+```
+
+  If Codex can’t resolve your PATH when it spawns the process, use the absolute
+  path from `command -v hellodb-mcp` (often `/usr/local/bin/hellodb-mcp`). For
+  **remote** MCP, use Codex’s HTTP/streamable options with a URL you control
+  (same shape as Claude Desktop above), not a hellodb-owned public endpoint.
 
 - **Cursor / other hosts (remote via bridge):** e.g. `supergateway` wrapping
   your HTTPS MCP endpoint:

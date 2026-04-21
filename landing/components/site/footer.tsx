@@ -8,8 +8,8 @@ export function Footer() {
               <span className="text-accent">›</span> hellodb
             </div>
             <p className="mt-3 max-w-sm text-[14px] leading-relaxed text-fg-muted text-pretty">
-              Sovereign memory for Claude Code. Built in the open in Rust.
-              MIT-licensed. v0.1.1.
+              Sovereign memory for agents — stdio MCP plus a Claude Code plugin.
+              Built in the open in Rust. MIT-licensed. v0.1.1.
             </p>
           </div>
 

@@ -12,7 +12,7 @@ export function ConsoleSig() {
     const fg = "color:#f1efea;font-family:ui-monospace,Menlo,monospace";
     /* eslint-disable no-console */
     console.log("%c› hellodb", accent);
-    console.log("%csovereign memory for Claude Code", fg);
+    console.log("%csovereign memory for agents · MCP · Claude Code plugin", fg);
     console.log("%c—", muted);
     console.log(
       "%cthis page was built in one session, in claude code,\nwith the same memory layer it markets.",

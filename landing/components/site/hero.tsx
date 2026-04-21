@@ -17,14 +17,16 @@ export function Hero() {
 
           <h1 className="font-display text-[44px] leading-[1] tracking-tight text-fg text-balance sm:text-[64px] sm:leading-[0.95] lg:text-[80px]">
             Sovereign memory<br />
-            for <span className="italic text-accent">Claude Code.</span>
+            for <span className="italic text-accent">agents.</span>
           </h1>
 
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-fg-muted text-pretty">
-            Local-first. End-to-end encrypted. Branchable. Two plugin agents
-            distill your sessions into facts — high-confidence ones merge
-            auto, uncertain ones wait for one-click review. You own the
-            keys, the data, and the bill.
+            Local-first. End-to-end encrypted. Branchable. A Claude Code plugin
+            is the fast path; <span className="text-fg">hellodb-mcp</span> is
+            stdio MCP — Cursor, Codex, Claude Desktop, and any other MCP host
+            hit the same tools. Two plugin agents distill sessions into facts —
+            high-confidence ones merge auto, uncertain ones wait for review. You
+            own the keys, the data, and the bill.
           </p>
 
           <div className="mt-8 w-full max-w-md">
@@ -34,7 +36,9 @@ export function Hero() {
                   curl -fsSL hellodb.dev/install | sh
                 </Prompt>
                 <div className="ml-5 text-fg-subtle">
-                  {"# done. Memory lives in ~/.hellodb on your next session."}
+                  {
+                    "# done. ~/.hellodb ready — wire hellodb-mcp in your MCP client (or use the Claude plugin)."
+                  }
                 </div>
               </div>
             </Terminal>

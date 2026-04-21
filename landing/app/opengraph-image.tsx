@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-export const alt = "hellodb — sovereign memory for Claude Code";
+export const alt = "hellodb — sovereign memory for agents (MCP · Claude Code)";
 export const dynamic = "force-static";
 
 const BG = "#1a1815";
@@ -60,7 +60,7 @@ export default function Image() {
             </span>
           </div>
           <div style={{ display: "flex", color: FG_SUBTLE, fontSize: 20 }}>
-            sovereign memory for Claude Code
+            MCP · Claude Code plugin · stdio hellodb-mcp
           </div>
         </div>
 
@@ -79,9 +79,7 @@ export default function Image() {
           <div style={{ display: "flex" }}>Sovereign memory</div>
           <div style={{ display: "flex", gap: 28 }}>
             <span>for</span>
-            <span style={{ fontStyle: "italic", color: ACCENT }}>
-              Claude Code.
-            </span>
+            <span style={{ fontStyle: "italic", color: ACCENT }}>agents.</span>
           </div>
         </div>
 

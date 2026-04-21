@@ -21,7 +21,7 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-const TITLE = "hellodb — sovereign memory for Claude Code";
+const TITLE = "hellodb — sovereign memory for agents (MCP · Claude Code)";
 const DESCRIPTION =
   "Local-first, end-to-end encrypted, branchable memory. A Claude Code plugin is the fast path if you use Claude; hellodb-mcp is a standard stdio MCP server, so any MCP-capable client can use the same tools. Plugin-driven digest pipelines auto-merge confident facts and hold uncertain ones for review. You own the keys, the data, and the bill.";
 const SITE = "https://hellodb.dev";
@@ -40,6 +40,7 @@ export const metadata: Metadata = {
     "Cursor",
     "MCP server",
     "Model Context Protocol",
+    "OpenAI Codex",
     "agent memory",
     "local-first",
     "sovereign",
