@@ -1,0 +1,127 @@
+# Deploy hellodb Cloudflare surfaces after CI passes on main.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   API token with at least:
+#                          Workers Scripts:Edit, Workers R2:Edit (gateway),
+#                          Account:Workers Routes (installer zone routes),
+#                          Cloudflare Pages:Edit (landing).
+#   CLOUDFLARE_ACCOUNT_ID  Account ID (Workers overview in dashboard).
+#
+# Gateway still expects GATEWAY_TOKEN in Cloudflare (wrangler secret put) — not in GitHub.
+#
+# Manual run: Actions → "Deploy Cloudflare" → Run workflow.
+
+name: Deploy Cloudflare
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cloudflare-deploy-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  deploy-gateway:
+    name: deploy gateway Worker
+    runs-on: ubuntu-22.04
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      )
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: gateway/package-lock.json
+
+      - run: npm ci
+      - name: Generate Wrangler types
+        run: npx wrangler types
+      - name: wrangler deploy
+        run: npx wrangler deploy
+
+  deploy-installer:
+    name: deploy installer Worker
+    runs-on: ubuntu-22.04
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      )
+    defaults:
+      run:
+        working-directory: installer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: installer/package-lock.json
+
+      - run: npm ci
+      - name: wrangler deploy
+        run: npx wrangler deploy
+
+  deploy-landing:
+    name: deploy Pages (landing)
+    runs-on: ubuntu-22.04
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      )
+    defaults:
+      run:
+        working-directory: landing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: landing/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: wrangler pages deploy
+        run: npx wrangler pages deploy out --project-name=hellodb-landing --branch=main
