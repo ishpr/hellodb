@@ -8,6 +8,9 @@ pub enum CoreError {
     #[error("invalid record: {0}")]
     InvalidRecord(String),
 
+    #[error("record payload too large: {size} bytes exceeds cap of {limit} bytes")]
+    PayloadTooLarge { size: usize, limit: usize },
+
     #[error("schema not found: {0}")]
     SchemaNotFound(String),
 

@@ -36,5 +36,5 @@ pub use cursor::Cursor;
 pub use engine::QueryEngine;
 pub use error::QueryError;
 pub use filter::Filter;
-pub use query::{Query, QueryResult};
+pub use query::{Query, QueryResult, MAX_QUERY_LIMIT};
 pub use sort::{SortField, SortOrder};

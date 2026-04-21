@@ -13,6 +13,22 @@ use crate::error::CoreError;
 /// Content-addressed record ID (BLAKE3 hex string).
 pub type RecordId = String;
 
+/// Hard cap on a record's canonical payload size in bytes.
+///
+/// hellodb is a memory store for agent context, not a blob store. Once a
+/// single record crosses this threshold it stops being something a
+/// retrieval tool can sensibly hand to an LLM turn and starts being a
+/// context-stuffing vector in its own right (the MCP caller can pull that
+/// record by id and dump it straight into the window). The cap sits at
+/// the write boundary so by the time any retrieval path touches the data
+/// it is already bounded.
+///
+/// 256 KiB is ~64k tokens at typical English density — generous for a
+/// single fact, prohibitive for a raw transcript dump. Callers that need
+/// to archive larger material should slice it into multiple records and
+/// reference them by id, which is what the digest pipeline does anyway.
+pub const MAX_RECORD_PAYLOAD_BYTES: usize = 256 * 1024;
+
 /// A signed, content-addressed hellodb record.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record {
@@ -92,6 +108,12 @@ impl Record {
         };
 
         let canonical = canonicalize_value(&signable)?;
+        if canonical.len() > MAX_RECORD_PAYLOAD_BYTES {
+            return Err(CoreError::PayloadTooLarge {
+                size: canonical.len(),
+                limit: MAX_RECORD_PAYLOAD_BYTES,
+            });
+        }
         let record_id = content_hash(&canonical);
         let sig = signing_key.sign(&canonical);
 
@@ -233,6 +255,29 @@ mod tests {
         let restored: Record = serde_json::from_str(&json_str).unwrap();
         assert!(restored.verify().is_ok());
         assert_eq!(restored.record_id, rec.record_id);
+    }
+
+    #[test]
+    fn oversize_payload_is_rejected() {
+        let kp = KeyPair::generate();
+        // One field whose value alone blows past the cap. We use a String
+        // because serde_json::Value::String gets escaped 1:1 in canonical
+        // form, so the byte count is predictable.
+        let big = "x".repeat(MAX_RECORD_PAYLOAD_BYTES + 1_024);
+        let result = Record::new(
+            &kp.signing,
+            "test.schema".into(),
+            "test".into(),
+            json!({ "blob": big }),
+            None,
+        );
+        match result {
+            Err(CoreError::PayloadTooLarge { size, limit }) => {
+                assert!(size > limit);
+                assert_eq!(limit, MAX_RECORD_PAYLOAD_BYTES);
+            }
+            other => panic!("expected PayloadTooLarge, got {other:?}"),
+        }
     }
 
     #[test]

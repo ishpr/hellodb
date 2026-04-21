@@ -57,14 +57,39 @@ pub struct LimitsConfig {
     /// Hard cap on episodes consumed per pass. Prevents a burst of activity
     /// from triggering a huge LLM call.
     pub max_episodes_per_pass: usize,
+    /// Max UTF-8 characters of raw episode `data` serialised into a single
+    /// digest prompt row. Oversize episodes are head-truncated with a `…`
+    /// marker so the LLM still sees the beginning (usually the intent)
+    /// without the tail getting stuffed into context verbatim.
+    ///
+    /// This is the primary anti-context-stuffing knob for the digest step:
+    /// without it, a batch of long transcripts produces an unbounded prompt
+    /// and the sidecar becomes the very thing it exists to prevent.
+    #[serde(default = "default_max_episode_chars")]
+    pub max_episode_chars: usize,
+    /// Hard ceiling on the total characters of the digest prompt. If the
+    /// per-episode cap still produces a prompt over this size, later
+    /// episodes are dropped (cursor is preserved via the brain's state so
+    /// they re-enter the next pass — no data loss, just back-pressure).
+    #[serde(default = "default_max_prompt_chars")]
+    pub max_prompt_chars: usize,
 }
 
 impl Default for LimitsConfig {
     fn default() -> Self {
         Self {
             max_episodes_per_pass: 200,
+            max_episode_chars: default_max_episode_chars(),
+            max_prompt_chars: default_max_prompt_chars(),
         }
     }
+}
+
+fn default_max_episode_chars() -> usize {
+    2_000
+}
+fn default_max_prompt_chars() -> usize {
+    200_000
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

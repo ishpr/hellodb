@@ -15,5 +15,5 @@ pub use branch::{Branch, BranchId, BranchState, MergeConflict, MergeResult};
 pub use canonical::{canonicalize, canonicalize_value};
 pub use error::CoreError;
 pub use namespace::{Namespace, NamespaceId};
-pub use record::{Record, RecordId};
+pub use record::{Record, RecordId, MAX_RECORD_PAYLOAD_BYTES};
 pub use schema::{FieldType, Schema, SchemaField, SchemaRegistry};
