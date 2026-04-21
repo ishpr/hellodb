@@ -16,7 +16,7 @@ export function Nav() {
           <NavLink href="/#diagram">how it works</NavLink>
           <NavLink href="/blog">blog</NavLink>
           <NavLink
-            href="https://github.com/eprasad7/hellodb"
+            href="https://github.com/ishpr/hellodb"
             external
             aria-label="hellodb on GitHub"
           >

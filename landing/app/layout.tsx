@@ -115,7 +115,7 @@ const JSON_LD = {
       programmingLanguage: "Rust",
       license: "https://opensource.org/license/mit",
       downloadUrl: `${SITE}/install`,
-      codeRepository: "https://github.com/eprasad7/hellodb",
+      codeRepository: "https://github.com/ishpr/hellodb",
       offers: {
         "@type": "Offer",
         price: "0",

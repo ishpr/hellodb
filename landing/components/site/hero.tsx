@@ -48,7 +48,7 @@ export function Hero() {
               install →
             </Link>
             <a
-              href="https://github.com/eprasad7/hellodb"
+              href="https://github.com/ishpr/hellodb"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-bg-elevated px-5 font-mono text-[13px] text-fg transition-colors hover:border-border-strong"

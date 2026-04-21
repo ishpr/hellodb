@@ -2,7 +2,7 @@
 
 **Sovereign, encrypted, branchable memory for agents.**
 
-**Current release:** `v0.1.1` (see [GitHub Releases](https://github.com/eprasad7/hellodb/releases)).
+**Current release:** `v0.1.1` (see [GitHub Releases](https://github.com/ishpr/hellodb/releases)).
 
 A local-first database for agent memory that you own: SQLCipher-encrypted at
 rest, content-addressed + signed records, git-style branches, and a passive
@@ -92,7 +92,7 @@ embedding backend. Cloudflare's Workers AI has a generous free tier
 sync (10 GB + zero egress).
 
 ```sh
-git clone https://github.com/eprasad7/hellodb
+git clone https://github.com/ishpr/hellodb
 cd hellodb
 make setup-cloudflare   # wrangler OAuth, deploys a gateway Worker to your account
 ```
@@ -282,7 +282,7 @@ landing/                Next.js landing page (served at hellodb.dev)
 ## Developing from source
 
 ```sh
-git clone https://github.com/eprasad7/hellodb
+git clone https://github.com/ishpr/hellodb
 cd hellodb
 
 # Build + run + install plugin locally in one command
@@ -331,7 +331,7 @@ MIT — see [LICENSE](./LICENSE).
 ## Security
 
 If you find a vulnerability, please open a private security advisory at
-https://github.com/eprasad7/hellodb/security/advisories/new rather than a
+https://github.com/ishpr/hellodb/security/advisories/new rather than a
 public issue. No bug bounty, but we'll respond quickly and credit you in
 the fix.
 

@@ -343,7 +343,7 @@ export default function Post() {
               </pre>
               <div className="mt-5 flex flex-wrap gap-3 font-mono text-[13px]">
                 <a
-                  href="https://github.com/eprasad7/hellodb"
+                  href="https://github.com/ishpr/hellodb"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex h-10 items-center rounded-full border border-border px-4 text-fg-muted transition-colors hover:border-accent hover:text-accent"

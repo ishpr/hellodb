@@ -13,7 +13,7 @@
 # Environment overrides:
 #     HELLODB_VERSION       Pin to a tag (default: latest release)
 #     HELLODB_INSTALL_DIR   Binary install dir (default: /usr/local/bin or ~/.local/bin)
-#     HELLODB_REPO          Source repo (default: eprasad7/hellodb)
+#     HELLODB_REPO          Source repo (default: ishpr/hellodb)
 #     HELLODB_HOME          Data dir (default: ~/.hellodb, passed through to hellodb)
 #     HELLODB_SKIP_INIT     Set to 1 to skip `hellodb init` (no DB bootstrap)
 #     HELLODB_SKIP_PLUGIN   Set to 1 to skip Claude Code plugin registration
@@ -23,7 +23,7 @@
 
 set -eu
 
-REPO="${HELLODB_REPO:-eprasad7/hellodb}"
+REPO="${HELLODB_REPO:-ishpr/hellodb}"
 VERSION="${HELLODB_VERSION:-latest}"
 
 # Pretty printing

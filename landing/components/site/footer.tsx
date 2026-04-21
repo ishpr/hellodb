@@ -19,17 +19,17 @@ export function Footer() {
           </FooterCol>
 
           <FooterCol title="code">
-            <FooterLink href="https://github.com/eprasad7/hellodb" external>
+            <FooterLink href="https://github.com/ishpr/hellodb" external>
               github
             </FooterLink>
             <FooterLink
-              href="https://github.com/eprasad7/hellodb/tree/main/crates"
+              href="https://github.com/ishpr/hellodb/tree/main/crates"
               external
             >
               crates
             </FooterLink>
             <FooterLink
-              href="https://github.com/eprasad7/hellodb/tree/main/gateway"
+              href="https://github.com/ishpr/hellodb/tree/main/gateway"
               external
             >
               gateway worker

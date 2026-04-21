@@ -6,9 +6,9 @@
   "observability": { "enabled": true },
   "vars": {
     "INSTALLER_VERSION": "0.2.0",
-    "REPO": "eprasad7/hellodb",
-    "INSTALL_SCRIPT_SH_RAW": "https://raw.githubusercontent.com/eprasad7/hellodb/main/scripts/install.sh",
-    "INSTALL_SCRIPT_PS1_RAW": "https://raw.githubusercontent.com/eprasad7/hellodb/main/scripts/install.ps1"
+    "REPO": "ishpr/hellodb",
+    "INSTALL_SCRIPT_SH_RAW": "https://raw.githubusercontent.com/ishpr/hellodb/main/scripts/install.sh",
+    "INSTALL_SCRIPT_PS1_RAW": "https://raw.githubusercontent.com/ishpr/hellodb/main/scripts/install.ps1"
   },
   // Route patterns (NOT custom_domain) so the Cloudflare Pages deployment
   // of landing/ can own the apex. The Worker only intercepts the paths it

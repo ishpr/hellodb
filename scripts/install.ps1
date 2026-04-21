@@ -16,7 +16,7 @@
 # Environment overrides:
 #   $env:HELLODB_VERSION        Pin to a tag (default: latest release)
 #   $env:HELLODB_INSTALL_DIR    Binary install dir (default: ~\.hellodb\bin)
-#   $env:HELLODB_REPO           Source repo (default: eprasad7/hellodb)
+#   $env:HELLODB_REPO           Source repo (default: ishpr/hellodb)
 #   $env:HELLODB_HOME           Data dir (default: ~\.hellodb)
 #   $env:HELLODB_SKIP_INIT      "1" to skip `hellodb init`
 #   $env:HELLODB_SKIP_PLUGIN    "1" to skip Claude Code plugin registration
@@ -31,7 +31,7 @@ function Fail($msg) { Write-Host "✗  $msg"  -ForegroundColor Red; exit 1 }
 
 # ----- resolve config -----------------------------------------------------
 
-$Repo    = if ($env:HELLODB_REPO)    { $env:HELLODB_REPO }    else { "eprasad7/hellodb" }
+$Repo    = if ($env:HELLODB_REPO)    { $env:HELLODB_REPO }    else { "ishpr/hellodb" }
 $Version = if ($env:HELLODB_VERSION) { $env:HELLODB_VERSION } else { "latest" }
 $Home_   = if ($env:HELLODB_HOME)    { $env:HELLODB_HOME }    else { Join-Path $env:USERPROFILE ".hellodb" }
 

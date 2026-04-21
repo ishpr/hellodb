@@ -20,7 +20,7 @@ export function ConsoleSig() {
     );
     console.log("%c$ curl -fsSL hellodb.dev/install | sh", accent);
     console.log("%c—", muted);
-    console.log("%cgithub: https://github.com/eprasad7/hellodb", muted);
+    console.log("%cgithub: https://github.com/ishpr/hellodb", muted);
     /* eslint-enable no-console */
   }, []);
   return null;

@@ -94,7 +94,7 @@ export function Install() {
           </div>
           <div className="font-mono text-[13px] text-fg-muted [overflow-wrap:anywhere]">
             <span className="select-none text-accent">$</span> git clone
-            https://github.com/eprasad7/hellodb &amp;&amp; cd hellodb &amp;&amp;
+            https://github.com/ishpr/hellodb &amp;&amp; cd hellodb &amp;&amp;
             make onboard
           </div>
           <p className="mt-2 font-mono text-[11px] leading-relaxed text-fg-muted">

@@ -30,7 +30,7 @@ use serde::Deserialize;
 use crate::backend::SyncBackend;
 use crate::error::SyncError;
 
-const USER_AGENT: &str = "hellodb-sync/0.1 (+https://github.com/eprasad7/hellodb)";
+const USER_AGENT: &str = "hellodb-sync/0.1 (+https://github.com/ishpr/hellodb)";
 const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 /// Hard cap on the response body we will buffer into memory.
 /// Generous enough for any realistic sealed delta bundle, but bounded so a
