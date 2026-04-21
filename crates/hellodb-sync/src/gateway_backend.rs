@@ -345,7 +345,7 @@ fn read_body_string(resp: ureq::Response) -> String {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use std::io::{BufRead, BufReader, Read as IoRead, Write};
+    use std::io::{BufRead, BufReader, Write};
     use std::net::TcpListener;
     use std::sync::{
         atomic::{AtomicBool, Ordering},
@@ -397,6 +397,57 @@ mod tests {
         path: String,
         authorization: Option<String>,
         body: Vec<u8>,
+    }
+
+    /// Read the request body after headers. Supports `Content-Length` and
+    /// `Transfer-Encoding: chunked`. ureq may use chunked encoding for PUT
+    /// bodies; if we only read `Content-Length` bytes, leftover bytes break
+    /// the connection and the client sees `Unexpected EOF` (flaky tests).
+    fn read_request_body<R: BufRead>(
+        reader: &mut R,
+        headers: &HashMap<String, String>,
+    ) -> std::io::Result<Vec<u8>> {
+        let te = headers
+            .get("transfer-encoding")
+            .map(|s| s.as_str())
+            .unwrap_or("");
+        if te.to_ascii_lowercase().contains("chunked") {
+            let mut body = Vec::new();
+            loop {
+                let mut size_line = String::new();
+                reader.read_line(&mut size_line)?;
+                let hex_part = size_line.trim().split(';').next().unwrap_or("").trim();
+                let chunk_len = usize::from_str_radix(hex_part, 16).map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, "bad chunk size line")
+                })?;
+                if chunk_len == 0 {
+                    loop {
+                        let mut line = String::new();
+                        reader.read_line(&mut line)?;
+                        if line == "\r\n" || line == "\n" || line.is_empty() {
+                            break;
+                        }
+                    }
+                    break;
+                }
+                let mut chunk = vec![0u8; chunk_len];
+                reader.read_exact(&mut chunk)?;
+                body.extend_from_slice(&chunk);
+                let mut crlf = [0u8; 2];
+                reader.read_exact(&mut crlf)?;
+            }
+            Ok(body)
+        } else {
+            let content_length = headers
+                .get("content-length")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
+            let mut body = vec![0u8; content_length];
+            if content_length > 0 {
+                reader.read_exact(&mut body)?;
+            }
+            Ok(body)
+        }
     }
 
     impl MockServer {
@@ -498,14 +549,10 @@ mod tests {
             }
         }
 
-        let content_length: usize = headers
-            .get("content-length")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0);
-        let mut body = vec![0u8; content_length];
-        if content_length > 0 && reader.read_exact(&mut body).is_err() {
-            return;
-        }
+        let body = match read_request_body(&mut reader, &headers) {
+            Ok(b) => b,
+            Err(_) => return,
+        };
 
         let req = RecordedRequest {
             method: method.clone(),
@@ -716,6 +763,8 @@ mod tests {
         let server = MockServer::start(vec![("PUT", "/r2/", handler)]);
 
         let mut b = GatewaySyncBackend::new(server.url(), "tok");
+        // Non-empty body: exercises both Content-Length and chunked paths in
+        // `read_request_body` depending on ureq's framing.
         let err = b.put_blob("huge/key", &[0u8; 16]).unwrap_err();
         match err {
             SyncError::Http { status, body } => {
