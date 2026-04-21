@@ -59,7 +59,11 @@ jobs:
     name: secret scan
     runs-on: ubuntu-22.04
     steps:
+      # Full history: gitleaks diffs merge commits (e.g. `parent^..merge`); shallow
+      # clones omit parents and break `git log` with "unknown revision".
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
 
   # -----------------------------------------------------------------------

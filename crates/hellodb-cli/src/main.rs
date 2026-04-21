@@ -999,7 +999,9 @@ fn cmd_integrate(args: &[String]) -> Result<i32, String> {
         _ => {
             eprintln!("usage: hellodb integrate codex");
             eprintln!();
-            eprintln!("Registers hellodb-mcp as a stdio MCP server in Codex (~/.codex/config.toml).");
+            eprintln!(
+                "Registers hellodb-mcp as a stdio MCP server in Codex (~/.codex/config.toml)."
+            );
             eprintln!("Requires the `codex` CLI on PATH. Same as: codex mcp add hellodb -- <path-to-hellodb-mcp>");
             Ok(2)
         }

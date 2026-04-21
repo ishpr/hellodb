@@ -307,7 +307,11 @@ fn build_digest_prompt(episodes: &[TailEntry], config: &Config) -> String {
 fn truncate_json_value(v: &Value, max_chars: usize) -> Value {
     match v {
         Value::String(s) => Value::String(truncate_string_chars(s, max_chars)),
-        Value::Array(a) => Value::Array(a.iter().map(|x| truncate_json_value(x, max_chars)).collect()),
+        Value::Array(a) => Value::Array(
+            a.iter()
+                .map(|x| truncate_json_value(x, max_chars))
+                .collect(),
+        ),
         Value::Object(m) => Value::Object(
             m.iter()
                 .map(|(k, val)| (k.clone(), truncate_json_value(val, max_chars)))
@@ -486,7 +490,10 @@ mod tests {
         // Default per-episode cap is 2000 chars; the prompt must not carry
         // the full 10k body, but must carry the truncation marker.
         assert!(prompt.chars().count() < 5_000, "prompt should be truncated");
-        assert!(prompt.contains('…'), "prompt should carry truncation marker");
+        assert!(
+            prompt.contains('…'),
+            "prompt should carry truncation marker"
+        );
         assert!(!prompt.contains(&"x".repeat(3_000)));
     }
 

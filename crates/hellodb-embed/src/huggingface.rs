@@ -20,7 +20,12 @@ pub struct HuggingFaceEmbedder {
 }
 
 impl HuggingFaceEmbedder {
-    pub fn new(url: impl Into<String>, token: impl Into<String>, model: String, dim: usize) -> Self {
+    pub fn new(
+        url: impl Into<String>,
+        token: impl Into<String>,
+        model: String,
+        dim: usize,
+    ) -> Self {
         Self {
             url: url.into(),
             token: token.into(),
@@ -58,9 +63,8 @@ impl HuggingFaceEmbedder {
             .and_then(|s| s.parse().ok())
             .or_else(|| sec.and_then(|s| s.dim))
             .unwrap_or(DEFAULT_HF_DIM);
-        let base = std::env::var("HELLODB_EMBED_HF_URL").unwrap_or_else(|_| {
-            "https://api-inference.huggingface.co/models".to_string()
-        });
+        let base = std::env::var("HELLODB_EMBED_HF_URL")
+            .unwrap_or_else(|_| "https://api-inference.huggingface.co/models".to_string());
         let url = format!("{base}/{model}");
         Ok(Self::new(url, token, model, dim))
     }
