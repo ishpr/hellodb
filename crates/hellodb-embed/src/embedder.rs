@@ -40,26 +40,39 @@ pub trait Embedder: Send + Sync {
 /// `HELLODB_EMBED_BACKEND` values:
 /// - `"cloudflare"` — hits the user's own gateway Worker at `HELLODB_EMBED_GATEWAY_URL`
 /// - `"openai"` — hits any OpenAI-compatible embeddings endpoint (OpenAI, Voyage, Ollama, vLLM, Together)
+/// - `"huggingface"` / `"hf"` — Hugging Face Inference API (`HELLODB_EMBED_HF_TOKEN` or `[huggingface]` in `embed.toml`)
 /// - `"mock"` — deterministic, for tests
 /// - `"fastembed"` — pure-Rust local (requires `fastembed` feature)
-/// - `""` or unset → `EmbedError::Config("no backend configured")`
+/// - `""` or unset — if `~/.hellodb/embed.toml` sets `backend`, that value is used; else error
 pub fn build_from_env() -> Result<Box<dyn Embedder>, EmbedError> {
-    let backend = std::env::var("HELLODB_EMBED_BACKEND").unwrap_or_default();
+    let file = crate::embed_toml::try_load_embed_file();
+    let backend = std::env::var("HELLODB_EMBED_BACKEND")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| file.as_ref().and_then(|f| f.backend.clone()))
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            EmbedError::Config(
+                "HELLODB_EMBED_BACKEND unset and no backend in ~/.hellodb/embed.toml. \
+                 set HELLODB_EMBED_BACKEND (e.g. in your MCP host's env UI) or add embed.toml."
+                    .into(),
+            )
+        })?;
     match backend.as_str() {
         "cloudflare" | "cloudflare_gateway" => {
             Ok(Box::new(crate::cloudflare::CloudflareGatewayEmbedder::from_env()?))
         }
-        "openai" | "openai_compatible" => {
-            Ok(Box::new(crate::openai::OpenAICompatibleEmbedder::from_env()?))
-        }
+        "openai" | "openai_compatible" => Ok(Box::new(
+            crate::openai::OpenAICompatibleEmbedder::from_env_with_optional_file(file.as_ref())?,
+        )),
+        "huggingface" | "hf" => Ok(Box::new(crate::huggingface::HuggingFaceEmbedder::from_env_and_optional_file(
+            file.as_ref(),
+        )?)),
         "mock" => Ok(Box::new(crate::mock::MockEmbedder::default())),
         #[cfg(feature = "fastembed")]
         "fastembed" | "local" => Ok(Box::new(crate::fastembed_backend::FastembedLocal::from_env()?)),
-        "" => Err(EmbedError::Config(
-            "HELLODB_EMBED_BACKEND unset. set to 'cloudflare', 'openai', 'mock', or 'fastembed'.".into(),
-        )),
         other => Err(EmbedError::Config(format!(
-            "unknown HELLODB_EMBED_BACKEND '{other}'. valid: cloudflare, openai, mock, fastembed (feature-gated)"
+            "unknown HELLODB_EMBED_BACKEND '{other}'. valid: cloudflare, openai, huggingface, mock, fastembed (feature-gated)"
         ))),
     }
 }

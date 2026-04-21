@@ -1383,7 +1383,7 @@ fn tool_catalog() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "hellodb_embed",
-            description: "Compute an embedding for the given text using the configured backend (set HELLODB_EMBED_BACKEND to 'cloudflare' | 'openai' | 'mock' | 'fastembed'). Returns the vector + dim + model. Use this if you want the embedding to hand off to hellodb_upsert_embedding or hellodb_recall_deep yourself; otherwise prefer hellodb_embed_and_search.",
+            description: "Compute an embedding for the given text using the configured backend (set HELLODB_EMBED_BACKEND to 'cloudflare' | 'openai' | 'huggingface' | 'mock' | 'fastembed'). Returns the vector + dim + model. Use this if you want the embedding to hand off to hellodb_upsert_embedding or hellodb_recall_deep yourself; otherwise prefer hellodb_embed_and_search.",
             input_schema: json!({
                 "type": "object",
                 "required": ["text"],

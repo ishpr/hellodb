@@ -243,7 +243,52 @@ codex mcp add hellodb -- "$(command -v hellodb-mcp)"
   | **Command to launch** | Absolute path to `hellodb-mcp`. Run `command -v hellodb-mcp` in a terminal (macOS/Linux often `/usr/local/bin/hellodb-mcp` or `~/.local/bin/hellodb-mcp`; Windows installer usually `%USERPROFILE%\.hellodb\bin\hellodb-mcp.exe`). |
   | **Arguments** | *(none — leave empty)* |
   | **Working directory** | *(optional — usually leave blank)* |
-  | **Environment variables** | Only if needed: `HELLODB_HOME` → your data dir (default `~/.hellodb`) |
+  | **Environment variables** | Use Codex’s **Key** / **Value** rows here — they are passed to the `hellodb-mcp` process (same as exporting in a shell). See below. |
+
+  **Embeddings API keys in the Codex UI:** add each variable with **+ Add environment variable**. Minimal sets:
+
+  **OpenAI (or any OpenAI-compatible `/v1/embeddings` endpoint)**
+
+  | Key | Value (example) |
+  |-----|-----------------|
+  | `HELLODB_EMBED_BACKEND` | `openai` |
+  | `HELLODB_EMBED_OPENAI_ENDPOINT` | `https://api.openai.com/v1/embeddings` |
+  | `HELLODB_EMBED_OPENAI_KEY` | your API key (or use `OPENAI_API_KEY`) |
+  | `HELLODB_EMBED_OPENAI_MODEL` | e.g. `text-embedding-3-small` |
+  | `HELLODB_EMBED_OPENAI_DIM` | e.g. `1536` (must match the model’s output size) |
+
+  **Hugging Face Inference API**
+
+  | Key | Value (example) |
+  |-----|-----------------|
+  | `HELLODB_EMBED_BACKEND` | `huggingface` |
+  | `HELLODB_EMBED_HF_TOKEN` | your HF token (or use `HF_TOKEN`) |
+  | `HELLODB_EMBED_HF_MODEL` | e.g. `sentence-transformers/all-MiniLM-L6-v2` |
+  | `HELLODB_EMBED_HF_DIM` | e.g. `384` (must match the model) |
+
+  Optional: `HELLODB_HOME` → non-default data directory. You can instead put
+  credentials in **`~/.hellodb/embed.toml`** (mode `0600`) and rely on fewer
+  Codex rows — env vars from the UI **override** file values for that server
+  process. Example:
+
+```toml
+backend = "openai"
+
+[openai]
+api_key = "sk-…"
+endpoint = "https://api.openai.com/v1/embeddings"
+model = "text-embedding-3-small"
+dim = 1536
+```
+
+```toml
+backend = "huggingface"
+
+[huggingface]
+token = "hf_…"
+model = "sentence-transformers/all-MiniLM-L6-v2"
+dim = 384
+```
 
   `hellodb-mcp` uses **stdin/stdout** for MCP; it does not take subcommands in
   **Arguments** (unlike examples like `openai-dev-mcp serve-sqlite`).

@@ -11,6 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::embed_toml::EmbedFile;
 use crate::embedder::Embedder;
 use crate::error::EmbedError;
 
@@ -55,23 +56,46 @@ impl OpenAICompatibleEmbedder {
     ///   HELLODB_EMBED_OPENAI_DIM       — output dim (so we don't have to call once to probe)
     ///
     /// Falls back to OPENAI_API_KEY if HELLODB_EMBED_OPENAI_KEY is unset.
+    /// Optional `~/.hellodb/embed.toml` (`[openai]`) fills gaps when env is unset.
     pub fn from_env() -> Result<Self, EmbedError> {
-        let endpoint = std::env::var("HELLODB_EMBED_OPENAI_ENDPOINT").map_err(|_| {
-            EmbedError::Config(
-                "HELLODB_EMBED_OPENAI_ENDPOINT unset (e.g. https://api.openai.com/v1/embeddings)"
-                    .into(),
-            )
-        })?;
+        let file = crate::embed_toml::try_load_embed_file();
+        Self::from_env_with_optional_file(file.as_ref())
+    }
+
+    pub fn from_env_with_optional_file(file: Option<&EmbedFile>) -> Result<Self, EmbedError> {
+        let o = file.and_then(|f| f.openai.as_ref());
+        let endpoint = std::env::var("HELLODB_EMBED_OPENAI_ENDPOINT")
+            .ok()
+            .or_else(|| o.and_then(|x| x.endpoint.clone()))
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                EmbedError::Config(
+                    "HELLODB_EMBED_OPENAI_ENDPOINT unset (e.g. https://api.openai.com/v1/embeddings) \
+                     or missing [openai].endpoint in ~/.hellodb/embed.toml"
+                        .into(),
+                )
+            })?;
         let api_key = std::env::var("HELLODB_EMBED_OPENAI_KEY")
             .or_else(|_| std::env::var("OPENAI_API_KEY"))
-            .map_err(|_| {
-                EmbedError::Config("HELLODB_EMBED_OPENAI_KEY (or OPENAI_API_KEY) unset".into())
+            .ok()
+            .or_else(|| o.and_then(|x| x.api_key.clone()))
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                EmbedError::Config(
+                    "HELLODB_EMBED_OPENAI_KEY (or OPENAI_API_KEY) unset, \
+                     or missing [openai].api_key in ~/.hellodb/embed.toml"
+                        .into(),
+                )
             })?;
         let model = std::env::var("HELLODB_EMBED_OPENAI_MODEL")
-            .unwrap_or_else(|_| "text-embedding-3-small".into());
+            .ok()
+            .or_else(|| o.and_then(|x| x.model.clone()))
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "text-embedding-3-small".into());
         let dim = std::env::var("HELLODB_EMBED_OPENAI_DIM")
             .ok()
             .and_then(|s| s.parse::<usize>().ok())
+            .or_else(|| o.and_then(|x| x.dim))
             .unwrap_or(1536); // default for text-embedding-3-small
         Ok(Self::new(endpoint, api_key, model, dim))
     }
