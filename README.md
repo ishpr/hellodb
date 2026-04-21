@@ -10,6 +10,13 @@ digest pipeline that turns raw session episodes into curated, decay-ranked
 facts. Optional Cloudflare backing (Workers AI embeddings, R2 sync) through
 your own account — zero shared service, zero affiliate middleman.
 
+**`hellodb-mcp`** is a **stdio MCP server** (newline-delimited JSON-RPC, MCP
+`2024-11-05`). Any agent host or IDE that supports **MCP** and can spawn a
+local process can attach to the same tools—not only Claude. The Claude Code
+plugin below is the fastest path if you already use Claude; everyone else
+points their MCP config at `hellodb-mcp` (see [Connector snippets](#connector-snippets))
+or at a remote URL plus a small bridge.
+
 Ships as a Claude Code plugin with:
 - **5 skills** that Claude triggers automatically (`/hellodb:memorize`,
   `/hellodb:recall`, `/hellodb:review`, `/hellodb:digest-now`,
@@ -166,6 +173,20 @@ Store these once so setup can be repeated consistently:
 
 ### Connector snippets
 
+These examples are **Claude- and Cursor-flavored** because their MCP UIs are
+well documented; the underlying contract is **generic MCP**—any compliant
+client can use the same binary or URL.
+
+- **Any MCP host (local stdio):** configure your client to run the installed
+  binary as the MCP server command (no args required):
+
+```sh
+command -v hellodb-mcp
+```
+
+  Use the absolute path your client expects; after `curl … | sh` it is usually
+  under `/usr/local/bin` or `~/.local/bin`.
+
 - **Claude Desktop (remote connector):**
 
   Add a custom connector URL to your exposed MCP endpoint, for example:
@@ -181,8 +202,8 @@ https://YOUR_HOST/hellodb-mcp?key=YOUR_ACCESS_KEY
 claude mcp add hellodb "$(command -v hellodb-mcp)"
 ```
 
-- **Codex/Cursor-style remote bridge:**
-  use `supergateway` bridge:
+- **Cursor / other hosts (remote via bridge):** e.g. `supergateway` wrapping
+  your HTTPS MCP endpoint:
 
 ```json
 {

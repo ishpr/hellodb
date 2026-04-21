@@ -42,9 +42,10 @@ export function Install() {
             <span className="text-accent">5 skills</span>,{" "}
             <span className="text-accent">2 plugin agents</span>{" "}
             (memory-digest + memory-consolidate), a Stop hook, and{" "}
-            <span className="text-accent">22 MCP tools</span> covering
-            namespaces, schemas, branches, vector upsert/recall, embed, and
-            Claude Code memory interop.
+            <span className="text-accent">22 MCP tools</span> via{" "}
+            <span className="text-accent">hellodb-mcp</span> (stdio MCP — any
+            MCP-capable client), plus namespaces, schemas, branches, vector
+            upsert/recall, embed, and Claude Code memory interop.
           </p>
         </div>
 
