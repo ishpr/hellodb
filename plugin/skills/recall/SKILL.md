@@ -27,8 +27,12 @@ You're retrieving memory from the user's hellodb to answer their current questio
    - `namespace`: `claude.facts`
    - `query_text`: your focused query
    - `top_k`: 5 (usually 3-8, scale with how broad the question is)
-   - `use_decay`: `true` (default) — prefer recently-reinforced facts
    - leave `branch` default (resolves to `claude.facts/main`)
+
+   The tool always applies freshness + reinforcement decay on top of
+   similarity — there's no "raw similarity" mode and you shouldn't want
+   one. Ranking stale neighbours above fresh ones is the exact failure
+   mode this memory store exists to avoid.
 
 3. **Judge relevance.** The tool returns hits with `similarity` and `final_score`. Facts with `similarity < 0.35` are probably noise — ignore them. Also check the `statement` actually addresses the user's topic; semantic search can surface tangentially related facts that aren't useful.
 

@@ -179,9 +179,13 @@ impl OpenRouterBackend {
         })
     }
 
-    fn call_openrouter(&self, episodes: &[TailEntry]) -> Result<Vec<Fact>, BrainError> {
+    fn call_openrouter(
+        &self,
+        episodes: &[TailEntry],
+        config: &Config,
+    ) -> Result<Vec<Fact>, BrainError> {
         let endpoint = format!("{}/chat/completions", self.base_url);
-        let prompt = build_digest_prompt(episodes);
+        let prompt = build_digest_prompt(episodes, config);
         let payload = json!({
             "model": self.model,
             "response_format": { "type": "json_object" },
@@ -223,7 +227,7 @@ impl OpenRouterBackend {
 
 impl DigestBackend for OpenRouterBackend {
     fn digest(&self, episodes: &[TailEntry], config: &Config) -> Result<Vec<Fact>, BrainError> {
-        match self.call_openrouter(episodes) {
+        match self.call_openrouter(episodes, config) {
             Ok(facts) => Ok(facts),
             Err(e) => {
                 if self.fallback_to_mock {
@@ -237,24 +241,101 @@ impl DigestBackend for OpenRouterBackend {
     }
 }
 
-fn build_digest_prompt(episodes: &[TailEntry]) -> String {
-    let rows: Vec<Value> = episodes
-        .iter()
-        .map(|e| {
-            json!({
-                "seq": e.seq,
-                "record_id": e.record.record_id,
-                "schema": e.record.schema,
-                "created_at_ms": e.record.created_at_ms,
-                "data": e.record.data,
-            })
-        })
-        .collect();
+/// Serialise tailed episodes into a digest prompt, with per-episode and
+/// per-prompt size caps applied.
+///
+/// The digest step runs outside the agent turn, but the LLM driving it still
+/// has a context window and still pays the "reasoning vs self-filtering"
+/// tax that context-stuffing imposes on any model. We therefore:
+///   1. Truncate each episode's `data` field to `max_episode_chars` UTF-8
+///      characters (head, not tail — the intent usually lives up front),
+///   2. Stop adding episodes once the prompt reaches `max_prompt_chars`.
+///
+/// Dropped episodes are safe to leave behind: the brain's tail cursor only
+/// advances on successful digest, so they reappear in the next pass.
+fn build_digest_prompt(episodes: &[TailEntry], config: &Config) -> String {
+    let max_episode_chars = config.limits.max_episode_chars;
+    let max_prompt_chars = config.limits.max_prompt_chars;
+
+    let mut rows: Vec<Value> = Vec::with_capacity(episodes.len());
+    let mut running_chars: usize = 0;
+    let mut dropped: usize = 0;
+
+    for e in episodes {
+        let truncated_data = truncate_json_value(&e.record.data, max_episode_chars);
+        let row = json!({
+            "seq": e.seq,
+            "record_id": e.record.record_id,
+            "schema": e.record.schema,
+            "created_at_ms": e.record.created_at_ms,
+            "data": truncated_data,
+        });
+
+        // Cheap size probe — compact JSON length is the practical proxy for
+        // how much the row will cost in the final pretty-printed prompt.
+        let row_chars = serde_json::to_string(&row)
+            .map(|s| s.chars().count())
+            .unwrap_or(0);
+
+        if running_chars + row_chars > max_prompt_chars && !rows.is_empty() {
+            dropped = episodes.len() - rows.len();
+            break;
+        }
+
+        running_chars += row_chars;
+        rows.push(row);
+    }
+
+    let body = serde_json::to_string_pretty(&rows).unwrap_or_else(|_| "[]".into());
+    let suffix = if dropped > 0 {
+        format!(
+            "\n\n(note: {dropped} episode(s) deferred to the next pass to stay under the prompt size cap)"
+        )
+    } else {
+        String::new()
+    };
 
     format!(
-        "Episodes (JSON):\n{}\n\nExtract durable facts only. Avoid transient chatter. Use derived_from record_ids from the input.",
-        serde_json::to_string_pretty(&rows).unwrap_or_else(|_| "[]".into())
+        "Episodes (JSON, per-field truncated):\n{body}{suffix}\n\nExtract durable facts only. Avoid transient chatter. Use derived_from record_ids from the input.",
     )
+}
+
+/// Truncate a JSON value so no single string leaf exceeds `max_chars` UTF-8
+/// characters. Objects and arrays are recursed into; non-string leaves pass
+/// through unchanged. Truncation respects character boundaries (never cuts
+/// inside a multi-byte codepoint) and appends a single `…` marker.
+fn truncate_json_value(v: &Value, max_chars: usize) -> Value {
+    match v {
+        Value::String(s) => Value::String(truncate_string_chars(s, max_chars)),
+        Value::Array(a) => Value::Array(a.iter().map(|x| truncate_json_value(x, max_chars)).collect()),
+        Value::Object(m) => Value::Object(
+            m.iter()
+                .map(|(k, val)| (k.clone(), truncate_json_value(val, max_chars)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+fn truncate_string_chars(s: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    let mut end_byte = s.len();
+    for (count, (i, _)) in s.char_indices().enumerate() {
+        if count == max_chars {
+            end_byte = i;
+            break;
+        }
+    }
+    if end_byte < s.len() {
+        let mut out = String::with_capacity(end_byte + 3);
+        out.push_str(&s[..end_byte]);
+        out.push('…');
+        out
+    } else {
+        s.to_string()
+    }
 }
 
 fn parse_facts_payload(raw: &str) -> Result<Vec<Fact>, BrainError> {
@@ -394,6 +475,51 @@ mod tests {
         assert_eq!(facts.len(), 1);
         assert_eq!(facts[0].supersedes.as_deref(), Some("old-fact-id"));
         assert!((facts[0].confidence - 0.92).abs() < 0.001);
+    }
+
+    #[test]
+    fn build_digest_prompt_truncates_oversize_fields() {
+        let cfg = Config::with_defaults(std::path::Path::new("/tmp"));
+        let long = "x".repeat(10_000);
+        let episodes = vec![ep("topic", &long, 1)];
+        let prompt = build_digest_prompt(&episodes, &cfg);
+        // Default per-episode cap is 2000 chars; the prompt must not carry
+        // the full 10k body, but must carry the truncation marker.
+        assert!(prompt.chars().count() < 5_000, "prompt should be truncated");
+        assert!(prompt.contains('…'), "prompt should carry truncation marker");
+        assert!(!prompt.contains(&"x".repeat(3_000)));
+    }
+
+    #[test]
+    fn build_digest_prompt_respects_prompt_size_ceiling() {
+        // Very tight per-episode and per-prompt caps so a small batch trips
+        // the overall prompt ceiling and later episodes get deferred.
+        let mut cfg = Config::with_defaults(std::path::Path::new("/tmp"));
+        cfg.limits.max_episode_chars = 100;
+        cfg.limits.max_prompt_chars = 300;
+
+        let episodes: Vec<_> = (0..20)
+            .map(|i| ep("topic", &format!("entry {i} body"), i as u64))
+            .collect();
+        let prompt = build_digest_prompt(&episodes, &cfg);
+
+        // At least one episode must land (first episode always goes in,
+        // otherwise the pass would stall indefinitely) and the prompt
+        // must carry the deferred-episodes note.
+        assert!(prompt.contains("deferred to the next pass"));
+        assert!(prompt.contains("entry 0 body"));
+        // And it must NOT contain the tail — prove back-pressure actually
+        // dropped episodes rather than silently stuffing them.
+        assert!(!prompt.contains("entry 19 body"));
+    }
+
+    #[test]
+    fn truncate_string_chars_is_utf8_safe() {
+        // 'é' is a 2-byte codepoint. A byte-based truncation at 3 would
+        // panic on char boundary; we truncate on char boundary instead.
+        let s = "abéde";
+        let out = truncate_string_chars(s, 3);
+        assert_eq!(out, "abé…");
     }
 
     #[test]

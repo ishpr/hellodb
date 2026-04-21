@@ -6,6 +6,22 @@ use crate::cursor::Cursor;
 use crate::filter::Filter;
 use crate::sort::SortField;
 
+/// Hard ceiling on the page size of a single query, regardless of what the
+/// caller asks for.
+///
+/// A retrieval tool that can be coaxed into returning millions of records
+/// turns itself into a context-stuffing vector: the caller (or an LLM
+/// driving the caller) sets `limit = 10_000_000` and gets a response that
+/// swamps whatever window consumes it. The cap below closes that door at
+/// the query layer so every read path inherits the same bound, not just
+/// the MCP tool schemas.
+///
+/// 1000 is an order of magnitude above the default per-page size (100) —
+/// large enough for legitimate bulk exports, small enough that it can't
+/// singlehandedly fill a model context. Callers who genuinely need more
+/// should paginate via the cursor.
+pub const MAX_QUERY_LIMIT: usize = 1_000;
+
 /// A query against hellodb records.
 ///
 /// Use the builder pattern to construct:
@@ -72,9 +88,13 @@ impl Query {
         self
     }
 
-    /// Set page size limit.
+    /// Set page size limit. Silently clamped to `MAX_QUERY_LIMIT` —
+    /// callers asking for more get the cap. This is the single chokepoint
+    /// for all read paths that go through the query engine, so no downstream
+    /// tool can accidentally return an unbounded page by plumbing a large
+    /// integer through.
     pub fn limit(mut self, limit: usize) -> Self {
-        self.limit = limit;
+        self.limit = limit.min(MAX_QUERY_LIMIT);
         self
     }
 

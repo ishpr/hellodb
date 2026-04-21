@@ -162,6 +162,14 @@ min_episodes_since_last_run = 5
 
 [limits]
 max_episodes_per_pass = 200
+# Max UTF-8 characters of raw episode `data` serialised into a single digest
+# prompt row. Oversize episodes are head-truncated so the LLM driving the
+# digest still sees their intent without absorbing their full tail.
+max_episode_chars = 2000
+# Hard ceiling on total prompt size. Episodes beyond this are deferred to
+# the next pass (the brain cursor only advances on success, so nothing is
+# lost — it's just back-pressure).
+max_prompt_chars = 200000
 
 [digest]
 # Supported backends:

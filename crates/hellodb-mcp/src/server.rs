@@ -569,10 +569,6 @@ impl Server {
             .and_then(Value::as_f64)
             .map(|d| (d * 86_400_000.0) as u64)
             .unwrap_or_else(default_half_life_ms);
-        let use_decay = args
-            .get("use_decay")
-            .and_then(Value::as_bool)
-            .unwrap_or(true);
 
         let index = self.open_vector_index(&namespace)?;
         let index_size = index.len();
@@ -583,6 +579,12 @@ impl Server {
         let storage = self.storage.lock().unwrap();
         let now = now_ms();
 
+        // Decay is intentionally not caller-overridable. It's the core of
+        // the anti-context-stuffing contract: a recall tool that can be
+        // coaxed into returning stale-but-similar records regresses to the
+        // "just stuff the nearest neighbours" failure mode. Callers who
+        // want pure similarity should use hellodb_upsert_embedding +
+        // hellodb_get_metadata directly and compose their own ranking.
         let mut scored: Vec<(f32, f32, f32, Value)> = Vec::with_capacity(hits.len());
         for hit in hits {
             let record = match storage
@@ -601,14 +603,12 @@ impl Server {
                 .map_err(|e| e.to_string())?;
 
             let similarity = hit.score;
-            let (decayed, final_score) = match (&meta, use_decay) {
-                (Some(m), true) => {
-                    let d = decayed_score(m, now, half_life_ms);
-                    let clamped = d.clamp(0.0, 10.0);
-                    (d, similarity * (1.0 + clamped))
-                }
-                _ => (0.0, similarity),
-            };
+            let decayed = meta
+                .as_ref()
+                .map(|m| decayed_score(m, now, half_life_ms))
+                .unwrap_or(0.0);
+            let freshness = freshness_factor(record.created_at_ms, now, half_life_ms);
+            let final_score = similarity * freshness * (1.0 + decayed.clamp(0.0, 10.0));
 
             let record_json = record_to_json(&record);
             scored.push((
@@ -636,7 +636,7 @@ impl Server {
                 "namespace": namespace,
                 "top_k": top_k,
                 "branch": branch,
-                "decay_applied": use_decay,
+                "decay_applied": true,
             },
             "hits": hits_json,
             "index_size": index_size,
@@ -887,14 +887,26 @@ impl Server {
                 hits as f32 / query_tokens.len() as f32
             };
 
+            // Freshness from the record's creation time — an always-on decay
+            // signal so unreinforced records can still be distinguished by
+            // age. Without this, a stale un-reinforced record with a weak
+            // keyword match scores identically to a fresh un-reinforced
+            // record with the same match, and the top-K regresses into
+            // "whichever the storage layer happened to list first."
+            //
+            // 2^(-(age)/half_life) — 1.0 at creation, 0.5 per half-life.
+            // Applied only in the keyword path; the vector path intentionally
+            // stays similarity-driven so semantic precision isn't diluted.
+            let freshness = freshness_factor(record.created_at_ms, now, half_life_ms);
+
             // Final score composition:
             //   - vector mode: similarity * (1 + decay)
-            //   - keyword mode: (keyword_score + 0.1) * (1 + decay)
+            //   - keyword mode: (keyword_score + 0.1) * freshness * (1 + decay)
             //     (the 0.1 offset keeps recall from collapsing to zero
             //     when the caller passed no query_text)
             let final_score = match similarity {
                 Some(sim) => sim * (1.0 + decayed.clamp(0.0, 10.0)),
-                None => (keyword_score + 0.1) * (1.0 + decayed.clamp(0.0, 10.0)),
+                None => (keyword_score + 0.1) * freshness * (1.0 + decayed.clamp(0.0, 10.0)),
             };
 
             // Pick a "statement" — the one-line summary a caller actually
@@ -955,6 +967,21 @@ fn now_ms() -> u64 {
 /// Default half-life for score decay: 7 days in ms.
 fn default_half_life_ms() -> u64 {
     7 * 86_400_000
+}
+
+/// `2^(-age / half_life)` — 1.0 at creation, 0.5 per half-life.
+///
+/// Defends the keyword-fallback ranking against the "un-reinforced ==
+/// indistinguishable" failure mode: without this, every record that was
+/// never reinforced has `decayed_score == 0`, and the keyword path loses
+/// its ability to tell a week-old fact from a year-old one.
+fn freshness_factor(created_at_ms: u64, now_ms: u64, half_life_ms: u64) -> f32 {
+    if half_life_ms == 0 || created_at_ms >= now_ms {
+        return 1.0;
+    }
+    let dt = (now_ms - created_at_ms) as f32;
+    let hl = half_life_ms as f32;
+    (-std::f32::consts::LN_2 * dt / hl).exp()
 }
 
 fn metadata_to_json(meta: &RecordMetadata, now_ms: u64, half_life_ms: u64) -> Value {
@@ -1239,7 +1266,7 @@ fn tool_catalog() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "hellodb_query",
-            description: "Query records with optional schema filter, field predicate, sort, and limit. Filter shape: {op: 'eq'|'ne'|'gt'|'lt'|'gte'|'lte'|'contains'|'starts_with', field, value} or {op:'and'|'or', filters:[...]} or {op:'not', filter:{...}}.",
+            description: "Query records with optional schema filter, field predicate, sort, and limit. Filter shape: {op: 'eq'|'ne'|'gt'|'lt'|'gte'|'lte'|'contains'|'starts_with', field, value} or {op:'and'|'or', filters:[...]} or {op:'not', filter:{...}}. Page size is clamped server-side to 1000; paginate via the cursor if you need more.",
             input_schema: json!({
                 "type": "object",
                 "required": ["namespace"],
@@ -1250,7 +1277,7 @@ fn tool_catalog() -> Vec<ToolDef> {
                     "filter": { "type": "object" },
                     "sort_by": { "type": "string", "description": "Field path to sort by" },
                     "sort_desc": { "type": "boolean", "default": false },
-                    "limit": { "type": "integer", "default": 100 }
+                    "limit": { "type": "integer", "default": 100, "maximum": 1000, "description": "Hard-capped at 1000 regardless of the value passed." }
                 }
             }),
         },
@@ -1363,7 +1390,7 @@ fn tool_catalog() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "hellodb_recall_deep",
-            description: "Semantic recall: top-k nearest-neighbor search over the namespace's vector index, joined with the actual records from storage and optionally reranked by reinforcement decay. Missing records (tombstoned or not present on the target branch) are skipped silently. Final score = similarity * (1 + clamp(decayed_score, 0, 10)) when decay is applied; otherwise similarity alone. Default half-life is 7 days. Use this as the default recall path when you have an embedding of the query; fall back to hellodb_query for predicate-based search.",
+            description: "Semantic recall: top-k nearest-neighbor search over the namespace's vector index, joined with the actual records from storage and reranked by freshness + reinforcement decay. Missing records (tombstoned or not present on the target branch) are skipped silently. Final score = similarity * freshness(created_at) * (1 + clamp(decayed_score, 0, 10)). Decay is always applied — this tool intentionally does not offer a raw-similarity mode, since that reintroduces the context-stuffing failure mode where stale neighbours swamp the top-K. Default half-life is 7 days. Use this as the default recall path when you have an embedding of the query; fall back to hellodb_query for predicate-based search.",
             input_schema: json!({
                 "type": "object",
                 "required": ["namespace", "query_embedding"],
@@ -1376,8 +1403,7 @@ fn tool_catalog() -> Vec<ToolDef> {
                     },
                     "top_k": { "type": "integer", "default": 5 },
                     "branch": { "type": "string", "description": "Default: {namespace}/main" },
-                    "half_life_days": { "type": "number", "default": 7.0 },
-                    "use_decay": { "type": "boolean", "default": true }
+                    "half_life_days": { "type": "number", "default": 7.0 }
                 }
             }),
         },
@@ -1394,7 +1420,7 @@ fn tool_catalog() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "hellodb_embed_and_search",
-            description: "Semantic recall in one call: embeds `query_text` via the configured backend (HELLODB_EMBED_BACKEND) and runs the same decay-aware ranking as hellodb_recall_deep. This is the default recall path for agents — no pre-computed vectors required.",
+            description: "Semantic recall in one call: embeds `query_text` via the configured backend (HELLODB_EMBED_BACKEND) and runs the same freshness+decay-aware ranking as hellodb_recall_deep. This is the default recall path for agents — no pre-computed vectors required. Decay is always applied.",
             input_schema: json!({
                 "type": "object",
                 "required": ["namespace", "query_text"],
@@ -1403,8 +1429,7 @@ fn tool_catalog() -> Vec<ToolDef> {
                     "query_text": { "type": "string" },
                     "top_k": { "type": "integer", "default": 5 },
                     "branch": { "type": "string", "description": "Default: {namespace}/main" },
-                    "half_life_days": { "type": "number", "default": 7.0 },
-                    "use_decay": { "type": "boolean", "default": true }
+                    "half_life_days": { "type": "number", "default": 7.0 }
                 }
             }),
         },
