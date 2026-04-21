@@ -7,6 +7,8 @@ on:
   pull_request:
 
 env:
+  # GitHub-hosted runners: opt JavaScript actions (checkout, setup-node, …) into Node 24 before the June 2026 default.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   # NOTE: we deliberately do NOT set RUSTFLAGS: -D warnings at workflow scope.
@@ -22,7 +24,7 @@ jobs:
     name: check + test
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Linux system deps (sqlcipher via bundled-sqlcipher needs these)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
@@ -57,7 +59,7 @@ jobs:
     name: secret scan
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: gitleaks/gitleaks-action@v2
 
   # -----------------------------------------------------------------------
@@ -70,10 +72,10 @@ jobs:
       run:
         working-directory: gateway
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: gateway/package-lock.json
       - run: npm ci
@@ -115,7 +117,7 @@ jobs:
             exe_suffix: ".exe"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Linux system deps
         if: runner.os == 'Linux'
@@ -207,7 +209,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/download-artifact@v4
         with:
