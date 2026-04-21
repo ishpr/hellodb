@@ -43,11 +43,11 @@ export function GatewayDiagram() {
           sub="your Cloudflare · ~$0"
           accent
           rows={[
+            { label: "/health", hint: "JSON status · unauthenticated" },
             { label: "/embed", hint: "→ Workers AI · bge-small (384d)" },
-            { label: "/r2/*", hint: "→ R2 bucket · encrypted deltas" },
-            { label: "/vec/*", hint: "→ Vectorize · optional mirror" },
-            { label: "/auth", hint: "→ Cloudflare Access · OAuth" },
-            { label: "deploy", hint: "wrangler login · no API token" },
+            { label: "/r2/*", hint: "→ R2 · encrypted blobs" },
+            { label: "Bearer", hint: "Authorization · GATEWAY_TOKEN" },
+            { label: "deploy", hint: "wrangler login · your account" },
           ]}
         />
       </div>
@@ -57,7 +57,7 @@ export function GatewayDiagram() {
           viewBox="0 0 1000 480"
           className="h-auto w-full"
           role="img"
-          aria-label="hellodb on your laptop talks over HTTPS to your gateway Worker, which proxies to Workers AI for embeddings, R2 for sync, Vectorize for vectors, and Cloudflare Access for auth"
+          aria-label="hellodb on your laptop talks over HTTPS to your gateway Worker, which proxies to Workers AI for embeddings and R2 for encrypted blobs; authenticated routes use a bearer token"
         >
           <defs>
             <linearGradient id="conn-grad" x1="0" x2="1" y1="0" y2="0">
@@ -295,11 +295,11 @@ export function GatewayDiagram() {
             />
 
             {[
-              { y: 158, route: "/embed", target: "Workers AI · bge-small (384d)" },
-              { y: 208, route: "/r2/*", target: "R2 bucket · encrypted deltas" },
-              { y: 258, route: "/vec/*", target: "Vectorize · optional mirror" },
-              { y: 308, route: "/auth", target: "Cloudflare Access · OAuth" },
-              { y: 358, route: "deploy", target: "wrangler login · no API token" },
+              { y: 158, route: "/health", target: "JSON status · unauthenticated" },
+              { y: 208, route: "/embed", target: "Workers AI · bge-small (384d)" },
+              { y: 258, route: "/r2/*", target: "R2 bucket · encrypted blobs" },
+              { y: 308, route: "Bearer", target: "Authorization · GATEWAY_TOKEN" },
+              { y: 358, route: "deploy", target: "wrangler login · your account" },
             ].map((row) => (
               <g key={row.route}>
                 <text

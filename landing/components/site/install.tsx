@@ -29,7 +29,7 @@ export function Install() {
                 curl -fsSL hellodb.dev/install | sh
               </Prompt>
               <div className="ml-5 text-fg-subtle">
-                {"# Windows: iwr hellodb.dev/install | iex"}
+                {"# Windows: iwr -useb hellodb.dev/install.ps1 | iex"}
               </div>
               <div className="mt-2 ml-5 text-fg-subtle">
                 {"# done. Memory lives in ~/.hellodb on your next Claude session."}

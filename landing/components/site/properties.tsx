@@ -19,10 +19,10 @@ export function Properties() {
           body="Ed25519 signatures, ChaCha20-Poly1305 at rest, BLAKE3 content addresses, SQLCipher database. Identity keys live in your OS keychain — never on disk in plaintext."
           illustration={<EncryptedIllustration />}
           snippet={[
-            ["$", "hellodb identity --show"],
-            [" ", "ed25519:GZkN4xQ…s8m"],
+            ["$", "hellodb status"],
+            [" ", "\"fingerprint\": \"ed25519:…\""],
             ["$", "ls ~/.hellodb"],
-            [" ", "db.sqlite (cipher)"],
+            [" ", "local.db · identity.key"],
           ]}
         />
         <PropertyCard
@@ -31,10 +31,10 @@ export function Properties() {
           body="The brain digests episodes into facts on a draft branch. Nothing lands on main until you approve. Memory works like git — branches, merges, history you can audit."
           illustration={<BranchableIllustration />}
           snippet={[
-            ["$", "hellodb list-branches"],
-            [" ", "main"],
-            [" ", "draft/2026-04-16-brain"],
+            ["$", "hellodb status"],
+            [" ", "… digest-* drafts in namespace JSON"],
             ["$", "/hellodb:review"],
+            [" ", "merge facts → main"],
           ]}
         />
         <PropertyCard
