@@ -56,7 +56,7 @@ export default function Image() {
             <span style={{ color: ACCENT }}>›</span>
             <span>hellodb</span>
             <span style={{ color: FG_SUBTLE, fontSize: 20, marginLeft: 16 }}>
-              v0.1.0
+              v0.1.1
             </span>
           </div>
           <div style={{ display: "flex", color: FG_SUBTLE, fontSize: 20 }}>

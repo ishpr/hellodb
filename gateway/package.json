@@ -1,6 +1,6 @@
 {
   "name": "hellodb-gateway",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Cloudflare Worker that fronts Workers AI (embeddings) and R2 (encrypted delta sync) for hellodb.",
   "type": "module",

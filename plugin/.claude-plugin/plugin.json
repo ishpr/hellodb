@@ -1,6 +1,6 @@
 {
   "name": "hellodb",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sovereign, end-to-end encrypted, branchable memory for Claude Code agents. Local-first MCP server with a passive-memory pipeline — primary agent writes episodes, a separate brain digests them into facts on a draft branch, user merges what they approve. Facts are ranked at recall time by semantic similarity plus decay-aware reinforcement.",
   "author": {
     "name": "Ish Prasad"

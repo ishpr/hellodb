@@ -12,7 +12,7 @@ export function Hero() {
         <div className="flex min-w-0 flex-col">
           <div className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-border bg-bg-elevated/60 px-3 py-1 font-mono text-[11px] tracking-tight text-fg-muted">
             <span className="h-1.5 w-1.5 animate-[pulse-dot_2.5s_ease-in-out_infinite] rounded-full bg-accent" />
-            v0.1.0 — phase 1 shipped
+            v0.1.1 — phase 1 shipped
           </div>
 
           <h1 className="font-display text-[44px] leading-[1] tracking-tight text-fg text-balance sm:text-[64px] sm:leading-[0.95] lg:text-[80px]">

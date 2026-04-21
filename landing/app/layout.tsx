@@ -111,7 +111,7 @@ const JSON_LD = {
       applicationCategory: "DeveloperApplication",
       applicationSubCategory: "Agent Memory",
       operatingSystem: "macOS, Linux, Windows",
-      softwareVersion: "0.1.0",
+      softwareVersion: "0.1.1",
       programmingLanguage: "Rust",
       license: "https://opensource.org/license/mit",
       downloadUrl: `${SITE}/install`,

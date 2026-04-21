@@ -10,7 +10,7 @@ export default defineWorkersConfig({
           // Provide a known secret value for tests; overrides anything from wrangler.jsonc.
           bindings: {
             GATEWAY_TOKEN: "test-secret-token",
-            GATEWAY_VERSION: "0.1.0-test",
+            GATEWAY_VERSION: "0.1.1-test",
           },
         },
       },

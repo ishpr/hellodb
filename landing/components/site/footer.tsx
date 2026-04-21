@@ -9,7 +9,7 @@ export function Footer() {
             </div>
             <p className="mt-3 max-w-sm text-[14px] leading-relaxed text-fg-muted text-pretty">
               Sovereign memory for Claude Code. Built in the open in Rust.
-              MIT-licensed. v0.1.0.
+              MIT-licensed. v0.1.1.
             </p>
           </div>
 

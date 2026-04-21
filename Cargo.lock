@@ -1029,7 +1029,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hellodb"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hellodb-auth",
  "hellodb-core",
@@ -1042,7 +1042,7 @@ dependencies = [
 
 [[package]]
 name = "hellodb-auth"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hellodb-core",
  "hellodb-crypto",
@@ -1053,7 +1053,7 @@ dependencies = [
 
 [[package]]
 name = "hellodb-brain"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hellodb-core",
  "hellodb-crypto",
@@ -1069,7 +1069,7 @@ dependencies = [
 
 [[package]]
 name = "hellodb-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hellodb-core",
  "hellodb-crypto",
@@ -1079,7 +1079,7 @@ dependencies = [
 
 [[package]]
 name = "hellodb-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "blake3",
  "hellodb-crypto",
@@ -1091,7 +1091,7 @@ dependencies = [
 
 [[package]]
 name = "hellodb-crypto"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "blake3",
@@ -1108,7 +1108,7 @@ dependencies = [
 
 [[package]]
 name = "hellodb-embed"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "fastembed",
  "serde",
@@ -1119,7 +1119,7 @@ dependencies = [
 
 [[package]]
 name = "hellodb-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hellodb-auth",
  "hellodb-core",
@@ -1135,7 +1135,7 @@ dependencies = [
 
 [[package]]
 name = "hellodb-query"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "hellodb-auth",
@@ -1150,7 +1150,7 @@ dependencies = [
 
 [[package]]
 name = "hellodb-storage"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hellodb-core",
  "hellodb-crypto",
@@ -1165,7 +1165,7 @@ dependencies = [
 
 [[package]]
 name = "hellodb-sync"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hellodb-core",
  "hellodb-crypto",
@@ -1181,7 +1181,7 @@ dependencies = [
 
 [[package]]
 name = "hellodb-vector"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hellodb-crypto",
  "serde",

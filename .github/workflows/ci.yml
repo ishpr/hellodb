@@ -96,7 +96,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14            # Apple Silicon (covers 100% of Apple hardware sold since 2020)
+          - os: macos-15            # Apple Silicon; macos-14 is deprecated / browned out on GHA
             target: aarch64-apple-darwin
             exe_suffix: ""
           # Intel Mac (x86_64-apple-darwin) intentionally dropped:
@@ -119,7 +119,7 @@ jobs:
 
       - name: Install Linux system deps
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
 
       # NOTE: Windows needs nasm + a recent perl for openssl-src's vendored
       # OpenSSL build. Both are preinstalled on windows-2022 runners

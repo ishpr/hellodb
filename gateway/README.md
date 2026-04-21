@@ -60,7 +60,7 @@ All non-2xx responses use a fixed envelope:
 
 ```json
 200 OK
-{ "status": "ok", "version": "0.1.0", "features": ["embed", "r2"] }
+{ "status": "ok", "version": "0.1.1", "features": ["embed", "r2"] }
 ```
 
 ### `POST /embed`
