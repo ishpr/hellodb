@@ -2,6 +2,8 @@
 
 **Sovereign, encrypted, branchable memory for agents.**
 
+**Current release:** `v0.1.1` (see [GitHub Releases](https://github.com/eprasad7/hellodb/releases)).
+
 A local-first database for agent memory that you own: SQLCipher-encrypted at
 rest, content-addressed + signed records, git-style branches, and a passive
 digest pipeline that turns raw session episodes into curated, decay-ranked
@@ -12,8 +14,9 @@ Ships as a Claude Code plugin with:
 - **5 skills** that Claude triggers automatically (`/hellodb:memorize`,
   `/hellodb:recall`, `/hellodb:review`, `/hellodb:digest-now`,
   `/hellodb:consolidate-now`)
-- **2 plugin agents** (`memory-digest`, `memory-consolidate`) with
-  Haiku-tuned prompts for low-cost session digestion/consolidation
+- **2 plugin agents** (`memory-digest`, `memory-consolidate`) with prompts
+  tuned for fast, low-cost digestion/consolidation (digest backend is
+  pluggable: `mock` locally, `openrouter` when configured)
 - **Stop hook** that fires the digest pipeline in the background after
   every session, idempotent, cool-down-gated
 - **22 MCP tools** exposing every primitive (namespaces, schemas,
@@ -133,13 +136,18 @@ Use this when you want managed embeddings/sync in your own cloud account.
 make setup-cloudflare
 ```
 
-2. Enable OpenRouter digestion backend (optional):
+2. (Optional) OpenRouter-backed digestion — set an API key, then optional
+   model and base URL:
 
 ```sh
 export HELLODB_BRAIN_OPENROUTER_API_KEY=...
+# optional:
+export HELLODB_BRAIN_OPENROUTER_MODEL=openai/gpt-4o-mini
+export HELLODB_BRAIN_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+export HELLODB_BRAIN_OPENROUTER_FALLBACK_TO_MOCK=1
 ```
 
-3. Update `brain.toml`:
+3. Point `brain.toml` at the digest backend:
 
 ```toml
 [digest]
@@ -166,10 +174,11 @@ Store these once so setup can be repeated consistently:
 https://YOUR_HOST/hellodb-mcp?key=YOUR_ACCESS_KEY
 ```
 
-- **Claude Code (local stdio):**
+- **Claude Code (local stdio):** use the MCP binary (same as the bundled
+  plugin — `hellodb-mcp`, not the `hellodb` CLI):
 
 ```sh
-claude mcp add hellodb $(command -v hellodb)
+claude mcp add hellodb "$(command -v hellodb-mcp)"
 ```
 
 - **Codex/Cursor-style remote bridge:**
@@ -197,55 +206,48 @@ See `integrations/remote-mcp-bridge/README.md` for additional bridge options.
 
 ## The memory loop
 
-```
-  ┌──────────────────┐                                    ┌────────────────┐
-  │ Claude session   │  user says durable thing           │  Brain         │
-  │                  ├──── /hellodb:memorize ────►┬──────►│  (Stop hook,   │
-  │                  │                            │ tail  │   every       │
-  │                  │  agent-author writes       │       │   session end) │
-  └──────────────────┘                            ▼       └──┬─────────────┘
-          ▲                            ┌────────────────┐    │ digest via
-  │                            │  claude.       │    │ memory-digest
-  │ /hellodb:recall            │  episodes      │    │ digest backend
-          │ (auto-triggers)            │  (raw)         │    ▼
-          │                            └────────────────┘  ┌────────────────┐
-          │                                                │  claude.facts/ │
-          │                            ┌────────────────┐  │  digest-<ts>   │
-          └────── embed_and_search ────┤  claude.facts/ │◄─┤  (draft branch)│
-                  + decay ranking      │  main          │  │                │
-                                       └────────────────┘  └────────────────┘
-                                              ▲                   │
-                                              │ /hellodb:review   │
-                                              └───────────────────┘
-                                                   (user merges)
+```text
+┌──────────────────┐   /hellodb:memorize    ┌──────────────────┐
+│  Claude session  │ ────────────────────► │ claude.episodes  │
+│  (coding agent)  │   agent writes raw    │  (namespaced)    │
+└────────┬─────────┘                       └────────┬─────────┘
+         │                                            │ tail cursor
+         │                                            ▼
+         │                                  ┌──────────────────┐
+         │                                  │ hellodb-brain    │
+         │                                  │ Stop hook each   │
+         │                                  │ session + digest │
+         │                                  │ (plugin agents)  │
+         │                                  └────────┬─────────┘
+         │                                            │
+         │                                            ▼
+         │                                  ┌──────────────────┐
+         │                                  │ Draft branch     │
+         │                                  │ claude.facts/    │
+         │                                  │ digest-*         │
+         │                                  └────────┬─────────┘
+         │                                            │
+         │   /hellodb:review (merge approved facts) ◄┘
+         │
+         ▼
+┌──────────────────┐
+│ /hellodb:recall  │◄── MCP: hellodb_embed_and_search, hellodb_find_relevant_memories
+│ + decay ranking  │    (semantic when embedder configured; keyword fallback otherwise)
+└──────────────────┘
 ```
 
 **Privacy model:** records are content-addressed and signed by a local
 Ed25519 identity. The SQLite file is encrypted with a SQLCipher key
 derived from the identity seed via BLAKE3. Vector indices are sealed
-per-namespace with ChaCha20-Poly1305 via [`hellodb-crypto::NamespaceKey`].
+at rest per namespace using ChaCha20-Poly1305 (see `hellodb-crypto`).
 
-**Reversed-dependency pattern:** the primary agent never triggers memory
-operations. A separate `hellodb-brain` daemon tails episodes and digests
-them via pluggable backends (`mock` for deterministic local runs, or
-`openrouter` when configured for LLM-backed extraction).
-
-Enable `openrouter` digestion by setting in `brain.toml`:
-
-```toml
-[digest]
-backend = "openrouter"
-```
-
-and exporting:
-
-```sh
-export HELLODB_BRAIN_OPENROUTER_API_KEY=...
-# optional:
-export HELLODB_BRAIN_OPENROUTER_MODEL=openai/gpt-4o-mini
-export HELLODB_BRAIN_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-export HELLODB_BRAIN_OPENROUTER_FALLBACK_TO_MOCK=1
-```
+**Sidecar pattern:** digestion runs in `hellodb-brain` (Stop hook + plugin
+agents), not inside the main agent turn. The coding agent writes episodes;
+the brain tails the log and proposes facts on draft branches for you to
+review. Backends: `mock` for deterministic local runs, or `openrouter` when
+configured for LLM-backed extraction. See **Path B** under
+[Dual-path onboarding](#dual-path-onboarding) for `brain.toml` and
+environment variables.
 
 ---
 
@@ -270,6 +272,8 @@ plugin/                 Claude Code plugin bundle (manifest, skills, agents, hoo
 gateway/                TypeScript Cloudflare Worker: Workers AI + R2 proxy
 installer/              TypeScript Cloudflare Worker: serves install.sh / install.ps1
 scripts/                install.sh + install.ps1 + onboard.sh + setup-cloudflare.sh
+recipes/                Community playbooks (metadata + README contract)
+integrations/           Reference architectures (Slack capture, remote MCP bridge, …)
 landing/                Next.js landing page (served at hellodb.dev)
 ```
 
